@@ -2,6 +2,8 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { db, initDatabase } from './db.js';
 import { connectMongoDB, isMongoDBConnected, syncDatabaseToMongoDB } from './mongodb.js';
 import {
@@ -14,6 +16,10 @@ import {
 } from './auth.js';
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distPath = path.resolve(__dirname, '../dist');
 
 // Initialize Local SQLite Database
 initDatabase();
@@ -1657,6 +1663,24 @@ app.get('/api/admin/logs', authMiddleware, requireRole(['admin', 'staff']), (req
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🌸 Durga Beauty Parlour Backend running on http://localhost:${PORT}`);
+// Serve static frontend assets from Vite build (dist)
+app.use(express.static(distPath));
+
+// Also serve public static assets (videos, images)
+const publicPath = path.resolve(__dirname, '../public');
+app.use(express.static(publicPath));
+
+// Catch-all SPA fallback: Send index.html for any client navigation (Express 5 compatible)
+app.use((req: Request, res: Response, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    return next();
+  }
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'API route not found' });
+  }
+  res.sendFile(path.join(distPath, 'index.html'));
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🌸 Durga Beauty Parlour Backend running on http://0.0.0.0:${PORT}`);
 });
