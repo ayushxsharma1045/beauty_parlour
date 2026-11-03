@@ -225,6 +225,85 @@ app.post('/api/auth/register-admin', (req: Request, res: Response) => {
   }
 });
 
+// Check public staff capacity status (Max 10 staff limit)
+app.get('/api/auth/staff-status', (req: Request, res: Response) => {
+  try {
+    const staffCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'staff' AND (is_approved = 1 OR is_approved IS NULL)").get() as { count: number };
+    const maxLimit = 10;
+    res.json({
+      count: staffCount.count,
+      maxLimit,
+      canRegisterStaff: staffCount.count < maxLimit
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to retrieve staff status.' });
+  }
+});
+
+// Self-register as a Salon Staff Member (Requires Admin Approval before login)
+app.post('/api/auth/register-staff', (req: Request, res: Response) => {
+  try {
+    const { name, email, phone, password, designation } = req.body;
+    if (!name || !email || !password) {
+      res.status(400).json({ error: 'Full name, email address, and password are required.' });
+      return;
+    }
+
+    // Enforce 10-staff limit
+    const staffCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'staff' AND (is_approved = 1 OR is_approved IS NULL)").get() as { count: number };
+    if (staffCount.count >= 10) {
+      res.status(403).json({
+        error: 'Staff registration limit reached! A maximum of 10 staff members are permitted in the salon system.'
+      });
+      return;
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const existing = db.prepare('SELECT id, role, is_approved FROM users WHERE email = ?').get(cleanEmail) as any;
+    if (existing) {
+      if (existing.role === 'staff' && existing.is_approved === 0) {
+        res.status(400).json({
+          error: 'A staff registration request with this email is already pending Administrator approval.'
+        });
+        return;
+      }
+      res.status(409).json({ error: 'An account with this email address already exists. Please sign in.' });
+      return;
+    }
+
+    const passwordHash = bcrypt.hashSync(password, 10);
+    const insert = db.prepare(`
+      INSERT INTO users (name, email, phone, password_hash, role, is_approved, designation)
+      VALUES (?, ?, ?, ?, 'staff', 0, ?)
+    `);
+    const result = insert.run(
+      name.trim(),
+      cleanEmail,
+      phone ? phone.trim() : '',
+      passwordHash,
+      designation ? designation.trim() : 'Salon Stylist'
+    );
+    const newId = Number(result.lastInsertRowid);
+
+    logAdminActivity(
+      'System',
+      'STAFF_REGISTRATION_REQUEST',
+      'user',
+      newId,
+      `New staff registration submitted by ${name.trim()} (${cleanEmail}, Role: ${designation || 'Salon Stylist'}). Pending Administrator Approval.`,
+      req.ip
+    );
+
+    res.status(201).json({
+      message: 'Staff registration request submitted successfully! Your account is currently pending Administrator approval. The salon owner must approve your account before you can log in.',
+      pendingApproval: true
+    });
+  } catch (err: any) {
+    console.error('Staff registration error:', err);
+    res.status(500).json({ error: 'Failed to submit staff registration.' });
+  }
+});
+
 app.post('/api/auth/login', (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
@@ -246,12 +325,22 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
       return;
     }
 
+    // Check if staff registration is pending admin approval
+    if (row.role === 'staff' && (row.is_approved === 0 || row.is_approved === '0')) {
+      res.status(403).json({
+        error: 'Your staff account is pending Administrator Approval! The Salon Owner must approve your registration from the Admin Dashboard before you can sign in.'
+      });
+      return;
+    }
+
     const user: AuthUser = {
       id: row.id,
       name: row.name,
       email: row.email,
       phone: row.phone,
-      role: row.role
+      role: row.role,
+      is_approved: row.is_approved,
+      designation: row.designation
     };
 
     const token = signToken(user);
@@ -505,6 +594,70 @@ app.post('/api/admin/staff', authMiddleware, requireRole(['admin']), (req: Authe
   }
 });
 
+// Get all staff members (Approved & Pending) - Admin only
+app.get('/api/admin/staff-list', authMiddleware, requireRole(['admin']), (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const staff = db.prepare(
+      "SELECT id, name, email, phone, role, designation, is_approved, created_at FROM users WHERE role = 'staff' ORDER BY is_approved ASC, created_at DESC"
+    ).all();
+    res.json(staff);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch staff members.' });
+  }
+});
+
+// Approve pending staff member registration - Admin only
+app.post('/api/admin/staff/:id/approve', authMiddleware, requireRole(['admin']), (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const staff = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'staff'").get(req.params.id) as any;
+    if (!staff) {
+      res.status(404).json({ error: 'Staff account not found.' });
+      return;
+    }
+
+    db.prepare("UPDATE users SET is_approved = 1 WHERE id = ?").run(req.params.id);
+
+    logAdminActivity(
+      req.user!.name,
+      'APPROVE_STAFF',
+      'user',
+      staff.id,
+      `Approved staff registration for ${staff.name} (${staff.email}, Role: ${staff.designation || 'Staff'})`,
+      req.ip
+    );
+
+    res.json({ message: `Staff member ${staff.name} approved successfully! They can now log in.` });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to approve staff account.' });
+  }
+});
+
+// Reject / Delete staff registration - Admin only
+app.delete('/api/admin/staff/:id', authMiddleware, requireRole(['admin']), (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const staff = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'staff'").get(req.params.id) as any;
+    if (!staff) {
+      res.status(404).json({ error: 'Staff account not found.' });
+      return;
+    }
+
+    db.prepare("DELETE FROM users WHERE id = ?").run(req.params.id);
+
+    logAdminActivity(
+      req.user!.name,
+      'REMOVE_STAFF',
+      'user',
+      staff.id,
+      `Removed staff account for ${staff.name} (${staff.email})`,
+      req.ip
+    );
+
+    res.json({ message: `Staff member ${staff.name} was removed.` });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to remove staff account.' });
+  }
+});
+
 // -----------------------------------------------------------------------------
 // 2. SERVICES & PRICING
 // -----------------------------------------------------------------------------
@@ -593,7 +746,7 @@ app.post('/api/services', authMiddleware, requireRole(['admin']), (req: Authenti
   }
 });
 
-app.put('/api/services/:id', authMiddleware, requireRole(['admin', 'staff']), (req: AuthenticatedRequest, res: Response) => {
+app.put('/api/services/:id', authMiddleware, requireRole(['admin']), (req: AuthenticatedRequest, res: Response) => {
   try {
     const { category, name, description, duration_mins, price, price_short, price_medium, price_long, suitable_skin, image_url, is_popular, is_active } = req.body;
     const update = db.prepare(`
@@ -752,7 +905,7 @@ app.post('/api/products', authMiddleware, requireRole(['admin']), (req: Authenti
   }
 });
 
-app.put('/api/products/:id', authMiddleware, requireRole(['admin', 'staff']), (req: AuthenticatedRequest, res: Response) => {
+app.put('/api/products/:id', authMiddleware, requireRole(['admin']), (req: AuthenticatedRequest, res: Response) => {
   try {
     const { name, brand, category, size, price, description, suitability, in_stock, is_used_in_salon, image_url } = req.body;
     const update = db.prepare(`
@@ -1438,6 +1591,305 @@ app.get('/api/admin/stats', authMiddleware, requireRole(['admin', 'staff']), (re
 });
 
 // -----------------------------------------------------------------------------
+// 10B. ADMIN-ONLY ADVANCED ANALYTICAL INTELLIGENCE & BUSINESS GRAPHS
+// -----------------------------------------------------------------------------
+
+app.get('/api/admin/analytics', authMiddleware, requireRole(['admin']), (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const range = (req.query.range as string) || 'all';
+    let dateFilterClause = '';
+    const dateParams: any[] = [];
+
+    const now = new Date();
+    if (range === '7days') {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      dateFilterClause = 'WHERE appointment_date >= ?';
+      dateParams.push(d.toISOString().split('T')[0]);
+    } else if (range === '30days') {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      dateFilterClause = 'WHERE appointment_date >= ?';
+      dateParams.push(d.toISOString().split('T')[0]);
+    } else if (range === 'thisMonth') {
+      const ym = now.toISOString().slice(0, 7); // e.g. '2026-11'
+      dateFilterClause = "WHERE strftime('%Y-%m', appointment_date) = ?";
+      dateParams.push(ym);
+    } else if (range === '6months') {
+      const d = new Date();
+      d.setMonth(d.getMonth() - 6);
+      dateFilterClause = 'WHERE appointment_date >= ?';
+      dateParams.push(d.toISOString().split('T')[0]);
+    }
+
+    // 1. Core KPIs
+    const totalBookingsRow = db.prepare(`SELECT COUNT(*) as count FROM appointments ${dateFilterClause}`).get(...dateParams) as { count: number };
+    const totalBookings = totalBookingsRow.count;
+
+    const completedRow = db.prepare(`SELECT COUNT(*) as count, SUM(price) as revenue FROM appointments ${dateFilterClause ? dateFilterClause + " AND" : "WHERE"} status = 'completed'`).get(...dateParams) as { count: number; revenue: number | null };
+    const completedBookings = completedRow.count;
+    const totalRevenue = completedRow.revenue || 0;
+
+    const confirmedRow = db.prepare(`SELECT COUNT(*) as count FROM appointments ${dateFilterClause ? dateFilterClause + " AND" : "WHERE"} status = 'confirmed'`).get(...dateParams) as { count: number };
+    const confirmedBookings = confirmedRow.count;
+
+    const cancelledRow = db.prepare(`SELECT COUNT(*) as count FROM appointments ${dateFilterClause ? dateFilterClause + " AND" : "WHERE"} status = 'cancelled'`).get(...dateParams) as { count: number };
+    const cancelledBookings = cancelledRow.count;
+
+    const pendingRow = db.prepare(`SELECT COUNT(*) as count FROM appointments ${dateFilterClause ? dateFilterClause + " AND" : "WHERE"} status = 'pending'`).get(...dateParams) as { count: number };
+    const pendingBookings = pendingRow.count;
+
+    const completionRate = totalBookings > 0 ? Math.round((completedBookings / totalBookings) * 100) : 0;
+    const averageOrderValue = completedBookings > 0 ? Math.round(totalRevenue / completedBookings) : 0;
+
+    // Customer Retention
+    const uniqueCustRow = db.prepare(`SELECT COUNT(DISTINCT customer_phone) as count FROM appointments ${dateFilterClause}`).get(...dateParams) as { count: number };
+    const uniqueCustomers = uniqueCustRow.count;
+
+    const repeatCustRow = db.prepare(`
+      SELECT COUNT(*) as count FROM (
+        SELECT customer_phone, COUNT(*) as bookings
+        FROM appointments
+        ${dateFilterClause}
+        GROUP BY customer_phone
+        HAVING bookings > 1
+      )
+    `).get(...dateParams) as { count: number };
+    const repeatCustomers = repeatCustRow.count;
+    const repeatRate = uniqueCustomers > 0 ? Math.round((repeatCustomers / uniqueCustomers) * 100) : 0;
+
+    // 2. Monthly Trend (Past 6 Months)
+    const monthlyRows = db.prepare(`
+      SELECT 
+        strftime('%Y-%m', appointment_date) as ym,
+        COUNT(*) as total_bookings,
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_bookings,
+        SUM(CASE WHEN status = 'completed' THEN price ELSE 0 END) as revenue
+      FROM appointments
+      WHERE appointment_date IS NOT NULL
+      GROUP BY ym
+      ORDER BY ym ASC
+    `).all() as Array<{ ym: string; total_bookings: number; completed_bookings: number; revenue: number | null }>;
+
+    const monthNames: Record<string, string> = {
+      '01': 'Jan', '02': 'Feb', '03': 'Mar', '04': 'Apr', '05': 'May', '06': 'Jun',
+      '07': 'Jul', '08': 'Aug', '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dec'
+    };
+
+    const monthlyTrends = monthlyRows.map((row, idx) => {
+      const [year, month] = (row.ym || '2026-01').split('-');
+      const label = `${monthNames[month] || month} ${year}`;
+      const rev = row.revenue || 0;
+      const prevRev = idx > 0 ? (monthlyRows[idx - 1].revenue || 0) : 0;
+      const growth = prevRev > 0 ? Math.round(((rev - prevRev) / prevRev) * 100) : 0;
+
+      return {
+        key: row.ym,
+        month: label,
+        revenue: rev,
+        bookings: row.total_bookings,
+        completed: row.completed_bookings,
+        growth
+      };
+    });
+
+    // 3. Category Breakdown
+    const categoryLabels: Record<string, { label: string; color: string }> = {
+      bridal: { label: 'Bridal & HD Airbrush Glam', color: '#541224' },
+      facial: { label: 'Facials & Ayurvedic Skincare', color: '#B76E79' },
+      haircoloring: { label: 'Balayage & Hair Coloring', color: '#8B4513' },
+      haircut: { label: 'Haircuts, Layers & Styling', color: '#D4A5AC' },
+      festive: { label: 'Festive & Ceremony Specials', color: '#C5A059' },
+      hairspa: { label: 'Nourishing Hair & Scalp Spa', color: '#2E8B57' },
+      waxing: { label: 'Smooth Waxing & Polishing', color: '#E0A96D' },
+      nails: { label: 'Nail Art & Extensions', color: '#9370DB' }
+    };
+
+    const categoryRows = db.prepare(`
+      SELECT 
+        service_category,
+        COUNT(*) as count,
+        SUM(CASE WHEN status = 'completed' THEN price ELSE 0 END) as revenue
+      FROM appointments
+      ${dateFilterClause}
+      GROUP BY service_category
+      ORDER BY revenue DESC, count DESC
+    `).all(...dateParams) as Array<{ service_category: string; count: number; revenue: number | null }>;
+
+    const categoryBreakdown = categoryRows.map((cat) => {
+      const info = categoryLabels[cat.service_category] || { label: cat.service_category.toUpperCase(), color: '#708090' };
+      const rev = cat.revenue || 0;
+      const pct = totalRevenue > 0 ? Math.round((rev / totalRevenue) * 100) : 0;
+      return {
+        category: cat.service_category,
+        label: info.label,
+        count: cat.count,
+        revenue: rev,
+        percentage: pct,
+        color: info.color
+      };
+    });
+
+    // 4. Day of the Week Traffic (0 = Sunday, 1 = Monday, ...)
+    const dayRows = db.prepare(`
+      SELECT 
+        strftime('%w', appointment_date) as dow,
+        COUNT(*) as bookings,
+        SUM(CASE WHEN status = 'completed' THEN price ELSE 0 END) as revenue
+      FROM appointments
+      ${dateFilterClause}
+      GROUP BY dow
+      ORDER BY dow ASC
+    `).all(...dateParams) as Array<{ dow: string; bookings: number; revenue: number | null }>;
+
+    const dayMap: Record<string, { name: string; full: string }> = {
+      '0': { name: 'Sun', full: 'Sunday' },
+      '1': { name: 'Mon', full: 'Monday' },
+      '2': { name: 'Tue', full: 'Tuesday' },
+      '3': { name: 'Wed', full: 'Wednesday' },
+      '4': { name: 'Thu', full: 'Thursday' },
+      '5': { name: 'Fri', full: 'Friday' },
+      '6': { name: 'Sat', full: 'Saturday' }
+    };
+
+    const dowDataMap: Record<string, { bookings: number; revenue: number }> = {};
+    for (const r of dayRows) {
+      dowDataMap[r.dow] = { bookings: r.bookings, revenue: r.revenue || 0 };
+    }
+
+    // Days ordered Mon -> Sun
+    const orderedKeys = ['1', '2', '3', '4', '5', '6', '0'];
+    let maxBookings = 0;
+    let busiestDayName = 'Saturday';
+
+    const dayOfWeekTrends = orderedKeys.map((key) => {
+      const info = dayMap[key];
+      const data = dowDataMap[key] || { bookings: 0, revenue: 0 };
+      if (data.bookings > maxBookings) {
+        maxBookings = data.bookings;
+        busiestDayName = info.full;
+      }
+      return {
+        key,
+        day: info.name,
+        fullDay: info.full,
+        bookings: data.bookings,
+        revenue: data.revenue
+      };
+    });
+
+    // 5. Hourly Traffic Breakdown
+    const hourRows = db.prepare(`
+      SELECT 
+        time_slot,
+        COUNT(*) as count
+      FROM appointments
+      ${dateFilterClause}
+      GROUP BY time_slot
+      ORDER BY count DESC
+    `).all(...dateParams) as Array<{ time_slot: string; count: number }>;
+
+    const hourlyTraffic = hourRows.map((h) => ({
+      slot: h.time_slot,
+      count: h.count,
+      percentage: totalBookings > 0 ? Math.round((h.count / totalBookings) * 100) : 0
+    }));
+
+    // 6. Top Services Leaderboard
+    const topServicesRows = db.prepare(`
+      SELECT 
+        service_name,
+        service_category,
+        COUNT(*) as bookings,
+        SUM(CASE WHEN status = 'completed' THEN price ELSE 0 END) as revenue
+      FROM appointments
+      ${dateFilterClause}
+      GROUP BY service_name, service_category
+      ORDER BY revenue DESC, bookings DESC
+      LIMIT 6
+    `).all(...dateParams) as Array<{ service_name: string; service_category: string; bookings: number; revenue: number | null }>;
+
+    const topServices = topServicesRows.map((s) => ({
+      name: s.service_name,
+      category: s.service_category,
+      bookings: s.bookings,
+      revenue: s.revenue || 0,
+      share: totalRevenue > 0 ? Math.round(((s.revenue || 0) / totalRevenue) * 100) : 0
+    }));
+
+    // 7. Top VIP Clients
+    const vipRows = db.prepare(`
+      SELECT 
+        customer_name,
+        customer_phone,
+        customer_email,
+        COUNT(*) as visits,
+        SUM(CASE WHEN status = 'completed' THEN price ELSE 0 END) as total_spent,
+        MAX(appointment_date) as last_visit,
+        MAX(service_name) as favorite_service
+      FROM appointments
+      ${dateFilterClause}
+      GROUP BY customer_phone
+      ORDER BY total_spent DESC, visits DESC
+      LIMIT 6
+    `).all(...dateParams) as Array<{
+      customer_name: string;
+      customer_phone: string;
+      customer_email: string | null;
+      visits: number;
+      total_spent: number | null;
+      last_visit: string;
+      favorite_service: string;
+    }>;
+
+    const topClients = vipRows.map((c) => ({
+      name: c.customer_name,
+      phone: c.customer_phone,
+      email: c.customer_email || '—',
+      visits: c.visits,
+      totalSpent: c.total_spent || 0,
+      lastVisit: c.last_visit,
+      favoriteService: c.favorite_service
+    }));
+
+    const topCategoryName = categoryBreakdown.length > 0 ? categoryBreakdown[0].label : 'Hair & Facials';
+
+    res.json({
+      kpis: {
+        totalRevenue,
+        totalBookings,
+        completedBookings,
+        confirmedBookings,
+        cancelledBookings,
+        pendingBookings,
+        completionRate,
+        averageOrderValue,
+        uniqueCustomers,
+        repeatCustomers,
+        repeatRate,
+        busiestDay: busiestDayName,
+        topCategory: topCategoryName
+      },
+      monthlyTrends,
+      categoryBreakdown,
+      dayOfWeekTrends,
+      hourlyTraffic,
+      statusBreakdown: {
+        completed: completedBookings,
+        confirmed: confirmedBookings,
+        pending: pendingBookings,
+        cancelled: cancelledBookings
+      },
+      topServices,
+      topClients
+    });
+  } catch (err: any) {
+    console.error('Analytics error:', err);
+    res.status(500).json({ error: 'Failed to generate analytical insights.' });
+  }
+});
+
+// -----------------------------------------------------------------------------
 // 11. GALLERY & PHOTO SHOWCASE
 // -----------------------------------------------------------------------------
 
@@ -1562,15 +2014,15 @@ app.post('/api/videos/:id/view', (req: Request, res: Response) => {
 
 app.post('/api/admin/videos', authMiddleware, requireRole(['admin', 'staff']), (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { title, category, video_url, thumbnail_url, duration, before_image, after_image, service_name, description } = req.body;
+    const { title, category, video_url, thumbnail_url, duration, before_image, after_image, service_name, description, music_url, music_title } = req.body;
     if (!title || !thumbnail_url) {
       res.status(400).json({ error: 'Title and thumbnail image are required.' });
       return;
     }
 
     const insert = db.prepare(`
-      INSERT INTO makeover_videos (title, category, video_url, thumbnail_url, duration, views, likes, before_image, after_image, service_name, description)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO makeover_videos (title, category, video_url, thumbnail_url, duration, views, likes, before_image, after_image, service_name, description, music_url, music_title)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = insert.run(
       title.trim(),
@@ -1583,7 +2035,9 @@ app.post('/api/admin/videos', authMiddleware, requireRole(['admin', 'staff']), (
       before_image ? before_image.trim() : null,
       after_image ? after_image.trim() : thumbnail_url.trim(),
       service_name ? service_name.trim() : null,
-      description ? description.trim() : null
+      description ? description.trim() : null,
+      music_url ? music_url.trim() : '/audio/raga-durga-salon.mp3',
+      music_title ? music_title.trim() : 'Raga Durga - Royal Sitar & Sarod'
     );
 
     const newVideo = db.prepare('SELECT * FROM makeover_videos WHERE id = ?').get(result.lastInsertRowid);
@@ -1632,7 +2086,7 @@ app.delete('/api/admin/videos/:id', authMiddleware, requireRole(['admin']), (req
 // 12. ADMIN AUDIT & ACTIVITY LOGS
 // -----------------------------------------------------------------------------
 
-app.get('/api/admin/logs', authMiddleware, requireRole(['admin', 'staff']), (req: AuthenticatedRequest, res: Response) => {
+app.get('/api/admin/logs', authMiddleware, requireRole(['admin']), (req: AuthenticatedRequest, res: Response) => {
   try {
     const { action, search, limit } = req.query;
     let query = 'SELECT * FROM admin_logs';

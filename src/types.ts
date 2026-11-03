@@ -4,6 +4,8 @@ export interface User {
   email: string;
   phone?: string;
   role: 'admin' | 'staff' | 'customer';
+  is_approved?: number;
+  designation?: string;
   created_at?: string;
 }
 
@@ -144,6 +146,76 @@ export interface MakeoverVideo {
   service_id?: number | null;
   service_name?: string | null;
   description?: string | null;
+  music_url?: string | null;
+  music_title?: string | null;
   created_at?: string;
+}
+
+export interface AnalyticsData {
+  kpis: {
+    totalRevenue: number;
+    totalBookings: number;
+    completedBookings: number;
+    confirmedBookings: number;
+    cancelledBookings: number;
+    pendingBookings: number;
+    completionRate: number;
+    averageOrderValue: number;
+    uniqueCustomers: number;
+    repeatCustomers: number;
+    repeatRate: number;
+    busiestDay: string;
+    topCategory: string;
+  };
+  monthlyTrends: Array<{
+    key: string;
+    month: string;
+    revenue: number;
+    bookings: number;
+    completed: number;
+    growth: number;
+  }>;
+  categoryBreakdown: Array<{
+    category: string;
+    label: string;
+    count: number;
+    revenue: number;
+    percentage: number;
+    color: string;
+  }>;
+  dayOfWeekTrends: Array<{
+    key: string;
+    day: string;
+    fullDay: string;
+    bookings: number;
+    revenue: number;
+  }>;
+  hourlyTraffic: Array<{
+    slot: string;
+    count: number;
+    percentage: number;
+  }>;
+  statusBreakdown: {
+    completed: number;
+    confirmed: number;
+    pending: number;
+    cancelled: number;
+  };
+  topServices: Array<{
+    name: string;
+    category: string;
+    bookings: number;
+    revenue: number;
+    share: number;
+  }>;
+  topClients: Array<{
+    name: string;
+    phone: string;
+    email: string;
+    visits: number;
+    totalSpent: number;
+    lastVisit: string;
+    favoriteService: string;
+  }>;
 }
 

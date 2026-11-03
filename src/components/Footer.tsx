@@ -26,8 +26,8 @@ export const Footer: React.FC<FooterProps> = ({ onOpenBooking }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 pb-12 border-b border-[#B76E79]/20">
           {/* Brand Info */}
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#D4A5AC] p-0.5 shadow-md bg-white">
+            <div className="flex items-center gap-3.5">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-[#D4A5AC] p-0.5 shadow-md bg-white shrink-0">
                 <img
                   src="/images/logo.jpg"
                   alt="Durga Beauty Parlour"
@@ -196,8 +196,20 @@ export const Footer: React.FC<FooterProps> = ({ onOpenBooking }) => {
             <span>Hygiene Guaranteed</span>
             <span>•</span>
             <span>Transparent Pricing in ₹</span>
-            <span>•</span>
             <Link to="/about" className="hover:text-white">Salon Policies</Link>
+            <span>•</span>
+            <Link to="/admin" className="hover:text-white text-[#F8CAD5]/90 font-medium underline underline-offset-2">
+              Staff & Admin Portal
+            </Link>
+            <span>•</span>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('replay-welcome-intro'))}
+              className="hover:text-white text-[#FFF3B0] font-medium flex items-center gap-1 cursor-pointer transition-colors"
+              title="Experience Makeup Brush & Royal Welcome Animation"
+            >
+              <Sparkles className="w-3 h-3 text-[#FFDF00]" />
+              <span>Intro Animation</span>
+            </button>
           </div>
         </div>
       </div>

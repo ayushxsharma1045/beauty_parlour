@@ -44,13 +44,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking }) => {
 
   const navLinks = [
     { name: 'Home', path: '/' },
-    { name: 'Hair Services', path: '/hair-services' },
-    { name: 'Facials & Skincare', path: '/facials' },
-    { name: 'Weddings & Festive', path: '/weddings-festive' },
-    { name: 'Makeover Reels', path: '/#makeover-reels', badge: 'Reels' },
-    { name: 'Beauty Products', path: '/products' },
+    { name: 'Hair Services', shortName: 'Hair', path: '/hair-services' },
+    { name: 'Facials & Skincare', shortName: 'Facials', path: '/facials' },
+    { name: 'Weddings & Festive', shortName: 'Bridal', path: '/weddings-festive' },
+    { name: 'Makeover Reels', shortName: 'Reels', path: '/#makeover-reels', badge: 'Reels' },
+    { name: 'Beauty Products', shortName: 'Products', path: '/products' },
     { name: 'Gallery', path: '/gallery' },
-    { name: 'About Us', path: '/about' },
+    { name: 'About Us', shortName: 'About', path: '/about' },
     { name: 'Contact', path: '/contact' },
   ];
 
@@ -91,6 +91,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking }) => {
             >
               WhatsApp Us
             </a>
+            <span className="text-[#B76E79]/60">|</span>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('replay-welcome-intro'))}
+              className="hover:text-white transition-colors flex items-center gap-1 text-[#FFF3B0] font-medium cursor-pointer"
+              title="Experience Makeup Brush & Royal Welcome Animation"
+            >
+              <Sparkles className="w-3 h-3 text-[#FFDF00] animate-pulse" />
+              <span className="hidden sm:inline">Intro Animation</span>
+            </button>
           </div>
         </div>
       </div>
@@ -103,34 +112,35 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking }) => {
             : 'bg-[#FDFBF7]/95 backdrop-blur-md py-3.5 border-b border-[#F4B8C5]/30'
         }`}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
+        <div className="w-full max-w-[1540px] mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between gap-3 xl:gap-4">
             {/* Logo & Brand Identity */}
-            <Link to="/" className="flex items-center gap-3 group">
-              <div className="relative w-11 h-11 sm:w-12 sm:h-12 rounded-full overflow-hidden p-0.5 border-2 border-[#B76E79] shadow-sm group-hover:border-[#541224] transition-all">
+            <Link to="/" className="flex items-center gap-3 group shrink-0">
+              <div className="relative w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-full overflow-hidden p-0.5 border-2 border-[#D4A5AC] shadow-md group-hover:border-[#541224] group-hover:shadow-lg transition-all duration-300 bg-white shrink-0">
                 <img
                   src="/images/logo.jpg"
                   alt="Durga Beauty Parlour Logo"
                   className="w-full h-full object-cover rounded-full group-hover:scale-105 transition-transform duration-300"
                 />
               </div>
-              <div className="flex flex-col">
-                <span className="font-serif text-xl sm:text-2xl font-bold tracking-tight text-[#541224] leading-tight">
+              <div className="flex flex-col justify-center shrink-0">
+                <span className="font-serif text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-[#541224] leading-tight whitespace-nowrap group-hover:text-[#7A1C36] transition-colors">
                   Durga Beauty Parlour
                 </span>
-                <span className="text-[10px] sm:text-xs font-medium tracking-widest uppercase text-[#B76E79]">
+                <span className="text-[9px] sm:text-[10px] lg:text-xs font-semibold tracking-widest uppercase text-[#B76E79] whitespace-nowrap">
                   Your Beauty, Our Passion.
                 </span>
               </div>
             </Link>
 
             {/* Desktop Navigation Links */}
-            <nav className="hidden lg:flex items-center gap-6">
+            <nav className="hidden xl:flex items-center gap-1.5 2xl:gap-4 shrink-0">
               {navLinks.map((link) => {
                 const isAnchor = link.path.startsWith('/#');
                 const content = (
-                  <span className="flex items-center gap-1.5">
-                    {link.name}
+                  <span className="flex items-center gap-1 whitespace-nowrap">
+                    <span className="hidden 2xl:inline">{link.name}</span>
+                    <span className="inline 2xl:hidden">{('shortName' in link && (link as any).shortName) || link.name}</span>
                     {'badge' in link && (
                       <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-[#541224] text-white">
                         {(link as any).badge}
@@ -151,7 +161,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking }) => {
                           if (el) el.scrollIntoView({ behavior: 'smooth' });
                         }
                       }}
-                      className="text-sm font-medium tracking-wide text-[#4A3B32] hover:text-[#B76E79] transition-colors relative py-1 cursor-pointer"
+                      className="px-1.5 py-1 text-xs 2xl:text-sm font-medium tracking-normal 2xl:tracking-wide text-[#4A3B32] hover:text-[#B76E79] transition-colors relative cursor-pointer whitespace-nowrap"
                     >
                       {content}
                     </a>
@@ -162,7 +172,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking }) => {
                   <Link
                     key={link.name}
                     to={link.path}
-                    className={`text-sm font-medium tracking-wide transition-colors relative py-1 ${
+                    className={`px-1.5 py-1 text-xs 2xl:text-sm font-medium tracking-normal 2xl:tracking-wide transition-colors relative whitespace-nowrap ${
                       isActive(link.path)
                         ? 'text-[#541224] font-semibold'
                         : 'text-[#4A3B32] hover:text-[#B76E79]'
@@ -178,7 +188,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking }) => {
             </nav>
 
             {/* Right Action Icons & Buttons */}
-            <div className="flex items-center gap-2 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
               {/* Shopping Bag Button */}
               <button
                 onClick={() => setIsCartOpen(true)}
@@ -249,7 +259,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking }) => {
                 ) : (
                   <Link
                     to="/auth"
-                    className="flex items-center gap-1.5 py-1.5 px-3 rounded-full border border-[#D4A5AC]/60 hover:bg-[#FCE7EC]/40 text-[#541224] text-xs font-medium transition-all"
+                    className="flex items-center gap-1.5 py-1.5 px-3 rounded-full border border-[#D4A5AC]/60 hover:bg-[#FCE7EC]/40 text-[#541224] text-xs font-medium transition-all shrink-0"
                   >
                     <User className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Sign In</span>
@@ -260,16 +270,17 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking }) => {
               {/* Book Appointment CTA Button */}
               <button
                 onClick={() => onOpenBooking()}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold tracking-wider uppercase text-white shadow-md hover:shadow-lg transition-all maroon-gradient hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold tracking-wider uppercase text-white shadow-md hover:shadow-lg transition-all maroon-gradient hover:scale-[1.02] active:scale-[0.98] cursor-pointer shrink-0"
               >
                 <Calendar className="w-3.5 h-3.5 text-[#F4B8C5]" />
-                <span>Book Appointment</span>
+                <span className="hidden 2xl:inline whitespace-nowrap">Book Appointment</span>
+                <span className="inline 2xl:hidden whitespace-nowrap">Book Now</span>
               </button>
 
               {/* Mobile Menu Toggle Button */}
               <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="lg:hidden p-2 rounded-lg text-[#541224] hover:bg-[#FCE7EC]/50 transition-colors"
+                className="xl:hidden p-2 rounded-lg text-[#541224] hover:bg-[#FCE7EC]/50 transition-colors cursor-pointer"
                 aria-label="Toggle menu"
               >
                 {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -280,7 +291,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking }) => {
 
         {/* Mobile Navigation Drawer */}
         {isOpen && (
-          <div className="lg:hidden border-t border-[#F4B8C5]/30 bg-[#FDFBF7] px-4 pt-4 pb-6 shadow-xl animate-in fade-in slide-in-from-top-4">
+          <div className="xl:hidden border-t border-[#F4B8C5]/30 bg-[#FDFBF7] px-4 pt-4 pb-6 shadow-xl animate-in fade-in slide-in-from-top-4">
             <div className="flex flex-col gap-2">
               {navLinks.map((link) => {
                 const isAnchor = link.path.startsWith('/#');

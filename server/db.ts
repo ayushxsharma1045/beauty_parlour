@@ -1285,68 +1285,214 @@ function seedDefaultData() {
     );
   }
 
-  // Seed Makeover Short Videos (Before & After Transformations)
-  const videoCount = db.prepare('SELECT COUNT(*) as count FROM makeover_videos').get() as { count: number };
-  if (videoCount.count === 0) {
-    const insertVideo = db.prepare(`
-      INSERT INTO makeover_videos (title, category, video_url, thumbnail_url, duration, views, likes, before_image, after_image, service_name, description)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+  // Ensure music_url and music_title columns exist in makeover_videos
+  try {
+    db.exec('ALTER TABLE makeover_videos ADD COLUMN music_url TEXT');
+  } catch {}
+  try {
+    db.exec('ALTER TABLE makeover_videos ADD COLUMN music_title TEXT');
+  } catch {}
 
-    insertVideo.run(
-      'Royal Heritage Bridal HD Makeover',
-      'bridal',
-      '/videos/bridal-makeover.mp4',
-      '/images/reels/bridal-makeover.jpg',
-      '0:45',
-      34800,
-      2150,
-      '/images/reels/bridal-before.jpg',
-      '/images/reels/bridal-makeover.jpg',
-      'Bridal HD Airbrush Makeover',
-      'Complete Royal Kundan bridal transformation with flawless HD dewy base, winged contour eye glam, and authentic heritage velvet lehenga styling.'
-    );
+  // Ensure is_approved and designation columns exist in users
+  try {
+    db.exec('ALTER TABLE users ADD COLUMN is_approved INTEGER DEFAULT 1');
+  } catch {}
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN designation TEXT DEFAULT 'Salon Stylist'");
+  } catch {}
 
-    insertVideo.run(
-      'Caramel Honey Balayage & Gloss Transformation',
-      'hair',
-      '/videos/hair-makeover.mp4',
-      '/images/reels/hair-makeover.jpg',
-      '0:35',
-      52100,
-      3890,
-      '/images/reels/hair-before.jpg',
-      '/images/reels/hair-makeover.jpg',
-      'Global Hair Color + Balayage',
-      'Dull uncolored hair transformed into multidimensional warm honey caramel balayage with signature bouncy blowout curls and mirror shine.'
-    );
+  // Seed / Upsert Makeover Short Videos (Before & After Transformations with Indian Music)
+  const upsertVideo = db.prepare(`
+    INSERT INTO makeover_videos (title, category, video_url, thumbnail_url, duration, views, likes, before_image, after_image, service_name, description, music_url, music_title)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      category = excluded.category,
+      video_url = excluded.video_url,
+      music_url = excluded.music_url,
+      music_title = excluded.music_title,
+      description = excluded.description
+  `);
 
-    insertVideo.run(
-      'Festive Sagan & Cocktail Glam Reveal',
-      'festive',
-      '/videos/festive-makeover.mp4',
-      '/images/reels/festive-makeover.jpg',
-      '0:30',
-      24700,
-      1680,
-      '/images/reels/festive-before.jpg',
-      '/images/reels/festive-makeover.jpg',
-      'Festive Sagan Evening Glow',
-      'Soft rose-gold smokey eye, luminous blush cheeks, and romantic cascading waves styled for an evening festive celebration.'
-    );
+  const initialReels = [
+    {
+      title: 'Royal Heritage Bridal HD Makeover',
+      category: 'bridal',
+      video_url: '/videos/bridal-makeover.mp4',
+      thumbnail_url: '/images/reels/bridal-makeover.jpg',
+      duration: '0:45',
+      views: 34800,
+      likes: 2150,
+      before_image: '/images/reels/bridal-before.jpg',
+      after_image: '/images/reels/bridal-makeover.jpg',
+      service_name: 'Bridal HD Airbrush Makeover',
+      description: 'Complete Royal Kundan bridal transformation with flawless HD dewy base, winged contour eye glam, and authentic heritage velvet lehenga styling.',
+      music_url: '/audio/mundian-to-bach-ke.mp3',
+      music_title: 'Mundian To Bach Ke (Bhangra Anthem) - Panjabi MC'
+    },
+    {
+      title: 'Moroccan Argan Hair Spa & Scalp Therapy',
+      category: 'hair_spa',
+      video_url: '/videos/hair-spa.mp4',
+      thumbnail_url: '/images/reels/hair-makeover.jpg',
+      duration: '0:42',
+      views: 41200,
+      likes: 3120,
+      before_image: '/images/reels/hair-before.jpg',
+      after_image: '/images/reels/hair-makeover.jpg',
+      service_name: 'Intensive Hair Spa & Scalp Therapy',
+      description: 'Deep conditioning steam hair spa with Moroccan argan oil mask, acupressure scalp massage, and anti-frizz mirror gloss treatment.',
+      music_url: '/audio/indian-bansuri-spa.mp3',
+      music_title: 'Soothing Indian Bansuri Flute & Tanpura Spa'
+    },
+    {
+      title: 'Deep Scalp Detox Steam & Keratin Infusion Hair Spa',
+      category: 'hair_spa',
+      video_url: '/videos/hair-spa-wash.mp4',
+      thumbnail_url: '/images/reels/hair-spa-wash-after.jpg',
+      duration: '0:38',
+      views: 38400,
+      likes: 2790,
+      before_image: '/images/reels/hair-spa-wash-before.jpg',
+      after_image: '/images/reels/hair-spa-wash-after.jpg',
+      service_name: 'Keratin Steam Spa & Scalp Detox',
+      description: 'Rejuvenating hot steam rinse, botanical tea-tree scalp scrub, and ultra-hydrating keratin protein masque leaving hair feather-light and mirror smooth.',
+      music_url: '/audio/mera-laung-gawacha.mp3',
+      music_title: 'Mera Laung Gawacha (Desi Pop) - Bally Sagoo'
+    },
+    {
+      title: 'Rich Burgundy & Mocha Balayage Transformation',
+      category: 'hair_color',
+      video_url: '/videos/hair-color.mp4',
+      thumbnail_url: '/images/reels/hair-makeover.jpg',
+      duration: '0:38',
+      views: 58900,
+      likes: 4310,
+      before_image: '/images/reels/hair-before.jpg',
+      after_image: '/images/reels/hair-makeover.jpg',
+      service_name: 'Global Hair Color + Highlights',
+      description: 'Seamless foil balayage blending dark mocha roots into radiant burgundy ribbons with high-shine glossing and blowout curls.',
+      music_url: '/audio/mera-laung-gawacha.mp3',
+      music_title: 'Mera Laung Gawacha (Desi Pop) - Bally Sagoo'
+    },
+    {
+      title: 'Caramel Honey Balayage & Gloss Transformation',
+      category: 'hair_color',
+      video_url: '/videos/hair-makeover.mp4',
+      thumbnail_url: '/images/reels/hair-makeover.jpg',
+      duration: '0:35',
+      views: 52100,
+      likes: 3890,
+      before_image: '/images/reels/hair-before.jpg',
+      after_image: '/images/reels/hair-makeover.jpg',
+      service_name: 'Global Hair Color + Balayage',
+      description: 'Dull uncolored hair transformed into multidimensional warm honey caramel balayage with signature bouncy blowout curls and mirror shine.',
+      music_url: '/audio/mast-kalandar-remix.mp3',
+      music_title: 'Mast Kalandar (Modern Dance Beat)'
+    },
+    {
+      title: 'Hazelnut Toffee Balayage & Bounce Blowout Transformation',
+      category: 'hair_color',
+      video_url: '/videos/hair-color-balayage.mp4',
+      thumbnail_url: '/images/reels/hair-color-balayage-after.jpg',
+      duration: '0:42',
+      views: 46700,
+      likes: 3410,
+      before_image: '/images/reels/hair-color-balayage-before.jpg',
+      after_image: '/images/reels/hair-color-balayage-after.jpg',
+      service_name: 'Premium Balayage & Gloss Toner',
+      description: 'Hand-painted sun-kissed toffee ribbon highlights on deep espresso hair, enriched with Bond-builder plex shield and finished with voluminous 90s blowout waves.',
+      music_url: '/audio/mundian-to-bach-ke.mp3',
+      music_title: 'Mundian To Bach Ke (Bhangra Anthem) - Panjabi MC'
+    },
+    {
+      title: '24K Gold Hydra-Glow Facial Reveal',
+      category: 'facial',
+      video_url: '/videos/facial-glow.mp4',
+      thumbnail_url: '/images/reels/facial-glow.jpg',
+      duration: '0:40',
+      views: 29300,
+      likes: 1940,
+      before_image: '/images/reels/facial-before.jpg',
+      after_image: '/images/reels/facial-glow.jpg',
+      service_name: 'Gold Radiance Facial',
+      description: 'Instant Korean glass-skin transformation. Botanical micro-massage, herbal peel, and 24K gold foil infused moisture lock for deep rejuvenation.',
+      music_url: '/audio/mast-kalandar-remix.mp3',
+      music_title: 'Mast Kalandar (Modern Dance Beat)'
+    },
+    {
+      title: 'Botanical Herbal Deep Cleanse & Glow Facial',
+      category: 'facial',
+      video_url: '/videos/facial-mask.mp4',
+      thumbnail_url: '/images/reels/facial-glow.jpg',
+      duration: '0:36',
+      views: 37400,
+      likes: 2850,
+      before_image: '/images/reels/facial-before.jpg',
+      after_image: '/images/reels/facial-glow.jpg',
+      service_name: 'Herbal & Fruit Radiance Facial',
+      description: 'Pure herbal mask infusion with lymphatic drainage for instant pore tightening and rosy pink natural glow.',
+      music_url: '/audio/mera-laung-gawacha.mp3',
+      music_title: 'Mera Laung Gawacha (Desi Pop) - Bally Sagoo'
+    },
+    {
+      title: 'Luxury Jade Roller & Kumkumadi Glow Facial Massage',
+      category: 'facial',
+      video_url: '/videos/facial-massage.mp4',
+      thumbnail_url: '/images/reels/facial-massage-after.jpg',
+      duration: '0:35',
+      views: 33100,
+      likes: 2420,
+      before_image: '/images/reels/facial-massage-before.jpg',
+      after_image: '/images/reels/facial-massage-after.jpg',
+      service_name: 'Ayurvedic Kumkumadi Glow Facial',
+      description: 'Acupressure face sculpting, chilled jade roller toning, and cold-pressed saffron kumkumadi oil massage for luminous glass radiance and lifted facial contours.',
+      music_url: '/audio/raga-yaman-sitar.mp3',
+      music_title: 'Raga Yaman - Peaceful Sitar & Tanpura'
+    },
+    {
+      title: 'Festive Sagan & Cocktail Glam Reveal',
+      category: 'festive',
+      video_url: '/videos/festive-makeover.mp4',
+      thumbnail_url: '/images/reels/festive-makeover.jpg',
+      duration: '0:30',
+      views: 24700,
+      likes: 1680,
+      before_image: '/images/reels/festive-before.jpg',
+      after_image: '/images/reels/festive-makeover.jpg',
+      service_name: 'Festive Sagan Evening Glow',
+      description: 'Soft rose-gold smokey eye, luminous blush cheeks, and romantic cascading waves styled for an evening festive celebration.',
+      music_url: '/audio/bollywood-dance-beat.mp3',
+      music_title: 'Chamiya No. 1 (Bollywood Dance Anthem)'
+    }
+  ];
 
-    insertVideo.run(
-      '24K Gold Hydra-Glow Facial Reveal',
-      'facial',
-      '/videos/facial-glow.mp4',
-      '/images/reels/facial-glow.jpg',
-      '0:40',
-      29300,
-      1940,
-      '/images/reels/facial-before.jpg',
-      '/images/reels/facial-glow.jpg',
-      'Gold Radiance Facial',
-      'Instant Korean glass-skin transformation. Botanical micro-massage, herbal peel, and 24K gold foil infused moisture lock for deep rejuvenation.'
-    );
+  for (const reel of initialReels) {
+    const existing = db.prepare('SELECT id FROM makeover_videos WHERE title = ?').get(reel.title) as { id: number } | undefined;
+    if (existing) {
+      db.prepare(`
+        UPDATE makeover_videos
+        SET category = ?, video_url = ?, thumbnail_url = ?, before_image = ?, after_image = ?, music_url = ?, music_title = ?, description = ?
+        WHERE id = ?
+      `).run(reel.category, reel.video_url, reel.thumbnail_url, reel.before_image, reel.after_image, reel.music_url, reel.music_title, reel.description, existing.id);
+    } else {
+      db.prepare(`
+        INSERT INTO makeover_videos (title, category, video_url, thumbnail_url, duration, views, likes, before_image, after_image, service_name, description, music_url, music_title)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        reel.title,
+        reel.category,
+        reel.video_url,
+        reel.thumbnail_url,
+        reel.duration,
+        reel.views,
+        reel.likes,
+        reel.before_image,
+        reel.after_image,
+        reel.service_name,
+        reel.description,
+        reel.music_url,
+        reel.music_title
+      );
+    }
   }
 }

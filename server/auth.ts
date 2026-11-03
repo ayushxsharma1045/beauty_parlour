@@ -9,6 +9,8 @@ export interface AuthUser {
   name: string;
   role: 'admin' | 'staff' | 'customer';
   phone?: string;
+  is_approved?: number;
+  designation?: string;
 }
 
 export interface AuthenticatedRequest extends Request {

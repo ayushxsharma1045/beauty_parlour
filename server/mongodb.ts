@@ -123,6 +123,8 @@ export async function syncDatabaseToMongoDB(sqliteDb: any) {
           viewsCount: r.views_count,
           serviceId: r.service_id,
           serviceName: r.service_name,
+          musicUrl: r.music_url,
+          musicTitle: r.music_title,
           isActive: Boolean(r.is_active),
         },
         { upsert: true, returnDocument: 'after' }

@@ -23,6 +23,7 @@ import { AuthPage } from './pages/AuthPage';
 import { CustomerPortalPage } from './pages/CustomerPortalPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { WeddingsFestivePage } from './pages/WeddingsFestivePage';
+import { WelcomeIntroAnimation } from './components/WelcomeIntroAnimation';
 
 export function App() {
   const [isBookingOpen, setIsBookingOpen] = useState(false);
@@ -45,6 +46,9 @@ export function App() {
         <ToastProvider>
           <BrowserRouter>
             <div className="min-h-screen flex flex-col justify-between bg-[#FDFBF7] text-[#2C1810]">
+              {/* Grand Welcome Entrance Intro Animation */}
+              <WelcomeIntroAnimation />
+
               {/* Sticky Luxury Navbar */}
               <Navbar onOpenBooking={handleOpenBooking} />
 

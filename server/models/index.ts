@@ -109,6 +109,8 @@ export interface IMakeoverReel extends Document {
   viewsCount: number;
   serviceId?: number;
   serviceName?: string;
+  musicUrl?: string;
+  musicTitle?: string;
   isActive: boolean;
   createdAt: Date;
 }
@@ -126,6 +128,8 @@ export const MakeoverReelSchema = new Schema<IMakeoverReel>({
   viewsCount: { type: Number, default: 0 },
   serviceId: { type: Number },
   serviceName: { type: String },
+  musicUrl: { type: String },
+  musicTitle: { type: String },
   isActive: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
 });

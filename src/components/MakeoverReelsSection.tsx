@@ -13,11 +13,9 @@ import {
   Calendar,
   Eye,
   Sliders,
-  Scissors,
-  Award,
-  Layers,
   ArrowRight,
-  Film
+  Film,
+  Music
 } from 'lucide-react';
 import { MakeoverVideo } from '../types';
 import { useToast } from '../context/ToastContext';
@@ -33,14 +31,14 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
   const [selectedVideoIndex, setSelectedVideoIndex] = useState<number | null>(null);
   const [sliderPosition, setSliderPosition] = useState<number>(50); // 0 to 100%
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
-  const [isMuted, setIsMuted] = useState<boolean>(true);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
   const [likedVideos, setLikedVideos] = useState<Record<number, boolean>>({});
-  const [activeViewMode, setActiveViewMode] = useState<'video' | 'slider' | 'after' | 'before'>('video');
+  const [viewMode, setViewMode] = useState<'video' | 'compare'>('video');
   const [animationProgress, setAnimationProgress] = useState<number>(0);
-  const [isDetailsExpanded, setIsDetailsExpanded] = useState<boolean>(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   // Load makeover videos
   const fetchVideos = async () => {
@@ -62,6 +60,9 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
   // Filtered videos
   const filteredVideos = videos.filter((v) => {
     if (activeCategory === 'all') return true;
+    if (activeCategory === 'hair_color') {
+      return v.category === 'hair_color' || v.category === 'hair';
+    }
     return v.category === activeCategory;
   });
 
@@ -103,13 +104,12 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
   // Open reel modal
   const handleOpenReel = (index: number) => {
     setSelectedVideoIndex(index);
-    setActiveViewMode('video');
+    setViewMode('video');
     setSliderPosition(50);
     setIsPlaying(true);
+    setIsMuted(false);
     setAnimationProgress(0);
-    setIsDetailsExpanded(false);
 
-    // Increment view count
     const video = filteredVideos[index];
     if (video) {
       fetch(`/api/videos/${video.id}/view`, { method: 'POST' }).catch(() => {});
@@ -134,24 +134,52 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
     }
   };
 
-  // Handle Mute Toggle
-  const toggleMute = () => {
+  // Handle Mute Toggle (controls both video audio & dedicated Indian background music)
+  const toggleMute = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
+
     if (videoRef.current) {
       videoRef.current.muted = nextMuted;
     }
+    if (audioRef.current) {
+      if (nextMuted) {
+        audioRef.current.pause();
+      } else if (isPlaying) {
+        audioRef.current.play().catch(() => {});
+      }
+    }
+    showToast(nextMuted ? 'Muted' : 'Sound On 🎵', 'info');
   };
+
+  // 1 Song per Video: Sync the dedicated music track for the active video
+  useEffect(() => {
+    if (activeVideo && audioRef.current) {
+      const trackUrl = activeVideo.music_url || '/audio/raga-yaman-sitar.mp3';
+      if (!audioRef.current.src.endsWith(trackUrl)) {
+        audioRef.current.src = trackUrl;
+      }
+      audioRef.current.volume = 0.75;
+      if (!isMuted && isPlaying) {
+        audioRef.current.play().catch(() => {});
+      } else {
+        audioRef.current.pause();
+      }
+    } else if (audioRef.current) {
+      audioRef.current.pause();
+    }
+  }, [activeVideo?.id, isMuted, isPlaying]);
 
   // Sync video play state on reel switch or mode switch
   useEffect(() => {
-    if (selectedVideoIndex !== null && activeViewMode === 'video' && videoRef.current) {
+    if (selectedVideoIndex !== null && viewMode === 'video' && videoRef.current) {
       videoRef.current.currentTime = 0;
       videoRef.current.muted = isMuted;
       videoRef.current.play().catch(() => {});
       setIsPlaying(true);
     }
-  }, [selectedVideoIndex, activeViewMode]);
+  }, [selectedVideoIndex, viewMode]);
 
   // Navigate next/previous reel
   const handleNextReel = () => {
@@ -170,23 +198,21 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
     }
   };
 
-  // Auto-play / progress loop fallback when in slider mode
+  // Auto-play progress loop when in compare mode
   useEffect(() => {
-    if (selectedVideoIndex === null || !isPlaying || activeViewMode === 'video') return;
+    if (selectedVideoIndex === null || !isPlaying || viewMode === 'video') return;
 
     const interval = setInterval(() => {
       setAnimationProgress((prev) => {
-        if (prev >= 100) {
-          return 0; // Loop reel
-        }
+        if (prev >= 100) return 0;
         return prev + 1;
       });
     }, 300);
 
     return () => clearInterval(interval);
-  }, [selectedVideoIndex, isPlaying, activeViewMode]);
+  }, [selectedVideoIndex, isPlaying, viewMode]);
 
-  // Handle keyboard navigation
+  // Keyboard navigation (Esc to close, Arrows to switch reels, Space to toggle play)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (selectedVideoIndex === null) return;
@@ -195,13 +221,13 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') handlePrevReel();
       if (e.key === ' ') {
         e.preventDefault();
-        setIsPlaying((p) => !p);
+        togglePlayPause();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedVideoIndex, filteredVideos.length]);
+  }, [selectedVideoIndex, filteredVideos.length, isPlaying]);
 
   return (
     <section id="makeover-reels" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
@@ -219,29 +245,37 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
           </h2>
 
           <p className="text-xs sm:text-sm text-gray-600 leading-relaxed font-light">
-            Real salon guests, authentic transformations. Tap any reel to watch the glamorous makeover reveal, slide to compare before & after looks, and book your transformation.
+            Real salon guests, authentic transformations. Tap any reel to watch the glamorous makeover reveal and book your look.
           </p>
         </div>
 
         {/* Category Filters */}
         <div className="flex flex-wrap gap-2 text-xs font-semibold">
           {[
-            { id: 'all', label: 'All Makeovers' },
-            { id: 'bridal', label: '👑 Bridal Glam' },
-            { id: 'hair', label: '💇 Hair Colors' },
-            { id: 'festive', label: '✨ Festive & Sagan' },
-            { id: 'facial', label: '🌸 Facial Glow' }
+            { id: 'all', label: 'All Transformations', count: videos.length },
+            { id: 'facial', label: '🌸 Facial Glow', count: videos.filter((v) => v.category === 'facial').length },
+            { id: 'hair_spa', label: '🧖‍♀️ Hair Spa Therapy', count: videos.filter((v) => v.category === 'hair_spa').length },
+            { id: 'hair_color', label: '🎨 Hair Colors & Balayage', count: videos.filter((v) => v.category === 'hair_color' || v.category === 'hair').length },
+            { id: 'bridal', label: '👑 Royal Bridal Glam', count: videos.filter((v) => v.category === 'bridal').length },
+            { id: 'festive', label: '✨ Festive Sagan Glam', count: videos.filter((v) => v.category === 'festive').length }
           ].map((cat) => (
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
-              className={`px-4 py-2 rounded-full transition-all cursor-pointer text-xs ${
+              className={`px-4 py-2 rounded-full transition-all cursor-pointer text-xs flex items-center gap-1.5 ${
                 activeCategory === cat.id
                   ? 'bg-[#541224] text-white shadow-md'
                   : 'bg-white text-gray-700 border border-gray-200 hover:border-[#B76E79]'
               }`}
             >
-              {cat.label}
+              <span>{cat.label}</span>
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeCategory === cat.id ? 'bg-[#FCE7EC] text-[#541224]' : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                {cat.count}
+              </span>
             </button>
           ))}
         </div>
@@ -299,11 +333,13 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
 
               {/* Bottom Card Content */}
               <div className="relative z-10 p-5 space-y-2 text-white">
-                {/* Before & After Badge */}
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#B76E79]/80 backdrop-blur-sm text-[10px] font-bold uppercase tracking-wider text-white">
-                  <Sliders className="w-3 h-3 text-[#F8CAD5]" />
-                  <span>Before & After Reveal</span>
-                </div>
+                {/* Dedicated Music Attribution */}
+                {video.music_title && (
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-[10px] font-medium text-[#FCE7EC] border border-white/15">
+                    <Music className="w-2.5 h-2.5 text-[#F4B8C5] shrink-0" />
+                    <span className="truncate max-w-[140px]">{video.music_title.split('-')[0].trim()}</span>
+                  </div>
+                )}
 
                 <h3 className="font-serif text-lg font-bold leading-snug text-white line-clamp-2 drop-shadow-sm group-hover:text-[#F8CAD5] transition-colors">
                   {video.title}
@@ -335,15 +371,15 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
       </div>
 
       {/* --------------------------------------------------------------------- */}
-      {/* FULLSCREEN SHORT VIDEO REEL MODAL (Instagram / TikTok / Shorts Style) */}
+      {/* MINIMALIST LUXURY REEL MODAL (Instagram / Shorts Style • Clean Controls) */}
       {/* --------------------------------------------------------------------- */}
       {activeVideo && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-0 sm:p-4 overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex items-center justify-center p-0 sm:p-4 overflow-hidden">
           {/* Close Button Top Right */}
           <button
             onClick={() => setSelectedVideoIndex(null)}
-            className="absolute top-4 right-4 z-50 p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all cursor-pointer hover:rotate-90"
-            title="Close Reel"
+            className="absolute top-4 right-4 z-50 p-2.5 rounded-full bg-white/15 hover:bg-white/30 text-white backdrop-blur-md transition-all cursor-pointer hover:rotate-90"
+            title="Close Reel (Esc)"
           >
             <X className="w-6 h-6" />
           </button>
@@ -368,67 +404,51 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
 
           {/* Central Vertical Player Card (9:16) */}
           <div className="relative w-full h-full sm:h-[92vh] sm:max-w-md sm:rounded-3xl overflow-hidden bg-black shadow-2xl flex flex-col justify-between border border-white/15 select-none">
-            {/* Top Reel Navigation Bar */}
+            {/* Top Navigation Bar: Minimal & Clean */}
             <div className="absolute top-0 left-0 right-0 z-30 p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent flex items-center justify-between text-white text-xs">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
                 <span className="font-bold uppercase tracking-wider text-[11px] text-[#F8CAD5]">
-                  Makeover Reel
-                </span>
-                <span className="text-gray-400">•</span>
-                <span className="text-gray-300 text-[11px]">
-                  {selectedVideoIndex! + 1} of {filteredVideos.length}
+                  Reel {selectedVideoIndex! + 1} of {filteredVideos.length}
                 </span>
               </div>
 
-              {/* View Mode Switcher: Video vs Slider vs Before vs Glam */}
-              <div className="flex items-center bg-black/60 backdrop-blur-md p-0.5 rounded-full border border-white/20 text-[10px]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveViewMode('video');
-                    setIsPlaying(true);
-                  }}
-                  className={`px-2.5 py-1 rounded-full transition-all cursor-pointer flex items-center gap-1 ${
-                    activeViewMode === 'video' ? 'bg-[#541224] text-white font-bold shadow-md' : 'text-gray-300 hover:text-white'
-                  }`}
-                >
-                  <Film className="w-3 h-3 text-[#F8CAD5]" />
-                  <span>Video</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveViewMode('slider')}
-                  className={`px-2.5 py-1 rounded-full transition-all cursor-pointer flex items-center gap-1 ${
-                    activeViewMode === 'slider' ? 'bg-[#541224] text-white font-bold shadow-md' : 'text-gray-300 hover:text-white'
-                  }`}
-                >
-                  <Sliders className="w-3 h-3 text-[#F8CAD5]" />
-                  <span>Split Slider</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveViewMode('before')}
-                  className={`px-2 py-1 rounded-full transition-all cursor-pointer ${
-                    activeViewMode === 'before' ? 'bg-[#541224] text-white font-bold' : 'text-gray-300'
-                  }`}
-                >
-                  Before
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveViewMode('after')}
-                  className={`px-2 py-1 rounded-full transition-all cursor-pointer ${
-                    activeViewMode === 'after' ? 'bg-[#541224] text-white font-bold' : 'text-gray-300'
-                  }`}
-                >
-                  Glam
-                </button>
-              </div>
+              {/* Clean View Mode Toggle (Only shown if Before photo exists) */}
+              {activeVideo.before_image && (
+                <div className="flex items-center bg-black/60 backdrop-blur-md p-0.5 rounded-full border border-white/20 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewMode('video');
+                      setIsPlaying(true);
+                    }}
+                    className={`px-3 py-1 rounded-full transition-all cursor-pointer flex items-center gap-1 ${
+                      viewMode === 'video'
+                        ? 'bg-[#541224] text-white font-bold shadow-sm'
+                        : 'text-gray-300 hover:text-white'
+                    }`}
+                  >
+                    <Film className="w-3 h-3 text-[#F8CAD5]" />
+                    <span>Video</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('compare')}
+                    className={`px-3 py-1 rounded-full transition-all cursor-pointer flex items-center gap-1 ${
+                      viewMode === 'compare'
+                        ? 'bg-[#541224] text-white font-bold shadow-sm'
+                        : 'text-gray-300 hover:text-white'
+                    }`}
+                  >
+                    <Sliders className="w-3 h-3 text-[#F8CAD5]" />
+                    <span>Before & After</span>
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Main Stage: Real Video Player OR Before/After Reveal */}
-            {activeViewMode === 'video' ? (
+            {/* Main Stage: Video Reel OR Before/After Compare */}
+            {viewMode === 'video' ? (
               <div
                 className="relative w-full h-full flex items-center justify-center overflow-hidden cursor-pointer bg-black"
                 onClick={togglePlayPause}
@@ -460,7 +480,7 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
                   />
                 )}
 
-                {/* Center Play/Pause indicator when paused */}
+                {/* Center Play Indicator when paused */}
                 {!isPlaying && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-xs transition-opacity pointer-events-none">
                     <div className="w-16 h-16 rounded-full bg-white/30 backdrop-blur-md flex items-center justify-center text-white border border-white/50 shadow-2xl scale-110 transition-transform">
@@ -468,54 +488,37 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
                     </div>
                   </div>
                 )}
-
-                {/* Live Real Video Badge */}
-                <div className="absolute top-16 left-4 z-20 px-3 py-1 rounded-full bg-black/70 backdrop-blur-md text-white text-[11px] font-bold border border-white/20 flex items-center gap-1.5 shadow-lg">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>REAL CUSTOMER VIDEO</span>
-                </div>
               </div>
             ) : (
               <div
                 ref={containerRef}
                 className="relative w-full h-full flex items-center justify-center overflow-hidden cursor-ew-resize bg-black"
                 onMouseMove={(e) => {
-                  if (activeViewMode !== 'slider' || !containerRef.current) return;
+                  if (!containerRef.current) return;
                   const rect = containerRef.current.getBoundingClientRect();
                   const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-                  const percentage = (x / rect.width) * 100;
-                  setSliderPosition(percentage);
+                  setSliderPosition((x / rect.width) * 100);
                 }}
                 onTouchMove={(e) => {
-                  if (activeViewMode !== 'slider' || !containerRef.current) return;
+                  if (!containerRef.current) return;
                   const rect = containerRef.current.getBoundingClientRect();
                   const touch = e.touches[0];
                   const x = Math.max(0, Math.min(touch.clientX - rect.left, rect.width));
-                  const percentage = (x / rect.width) * 100;
-                  setSliderPosition(percentage);
+                  setSliderPosition((x / rect.width) * 100);
                 }}
               >
                 {/* Layer 1: AFTER MAKEOVER IMAGE (Full) */}
                 <img
                   src={activeVideo.after_image || activeVideo.thumbnail_url}
                   alt={`${activeVideo.title} - After Makeover`}
-                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-                    activeViewMode === 'before' ? 'opacity-0' : 'opacity-100'
-                  }`}
+                  className="absolute inset-0 w-full h-full object-cover"
                 />
 
                 {/* Layer 2: BEFORE MAKEOVER IMAGE (Clipped by Slider) */}
                 {activeVideo.before_image && (
                   <div
                     className="absolute inset-0 overflow-hidden"
-                    style={{
-                      width:
-                        activeViewMode === 'before'
-                          ? '100%'
-                          : activeViewMode === 'after'
-                          ? '0%'
-                          : `${sliderPosition}%`
-                    }}
+                    style={{ width: `${sliderPosition}%` }}
                   >
                     <img
                       src={activeVideo.before_image}
@@ -527,7 +530,7 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
                       }}
                     />
                     <div className="absolute top-16 left-4 z-20 px-3 py-1 rounded-full bg-black/70 backdrop-blur-md text-white text-[11px] font-bold border border-white/20">
-                      BEFORE MAKEOVER
+                      BEFORE
                     </div>
                   </div>
                 )}
@@ -535,36 +538,33 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
                 {/* After Look Badge */}
                 <div className="absolute top-16 right-4 z-20 px-3 py-1 rounded-full bg-[#541224]/80 backdrop-blur-md text-white text-[11px] font-bold border border-white/20 flex items-center gap-1">
                   <Sparkles className="w-3 h-3 text-[#F4B8C5]" />
-                  <span>GLAM AFTER REVEAL</span>
+                  <span>AFTER GLAM</span>
                 </div>
 
-                {/* Draggable Divider Line in Slider Mode */}
-                {activeViewMode === 'slider' && (
-                  <div
-                    className="absolute top-0 bottom-0 z-30 w-1 bg-white shadow-[0_0_15px_rgba(255,255,255,0.8)] pointer-events-none"
-                    style={{ left: `${sliderPosition}%` }}
-                  >
-                    <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-9 h-9 rounded-full bg-white text-[#541224] shadow-xl flex items-center justify-center font-bold text-xs border-2 border-[#541224]">
-                      <Sliders className="w-4 h-4 text-[#541224]" />
-                    </div>
+                {/* Draggable Divider Line */}
+                <div
+                  className="absolute top-0 bottom-0 z-30 w-1 bg-white shadow-[0_0_15px_rgba(255,255,255,0.8)] pointer-events-none"
+                  style={{ left: `${sliderPosition}%` }}
+                >
+                  <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-9 h-9 rounded-full bg-white text-[#541224] shadow-xl flex items-center justify-center font-bold text-xs border-2 border-[#541224]">
+                    <Sliders className="w-4 h-4 text-[#541224]" />
                   </div>
-                )}
+                </div>
 
-                {activeViewMode === 'slider' && (
-                  <div className="absolute top-28 inset-x-0 mx-auto w-max px-3.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white/90 text-[10px] font-medium border border-white/15 pointer-events-none animate-pulse">
-                    ← Slide to inspect Before vs After Makeover →
-                  </div>
-                )}
+                <div className="absolute top-28 inset-x-0 mx-auto w-max px-3.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white/90 text-[10px] font-medium border border-white/15 pointer-events-none">
+                  ← Slide to compare Before & After →
+                </div>
               </div>
             )}
 
-            {/* Right Side Floating Social Actions (Like Reels & Shorts) */}
-            <div className="absolute right-3.5 bottom-32 z-40 flex flex-col items-center gap-4 text-white">
+            {/* Right Side Floating Actions (Like, Mute, Share) */}
+            <div className="absolute right-3.5 bottom-28 z-40 flex flex-col items-center gap-3.5 text-white">
               {/* Like Button */}
               <button
                 type="button"
                 onClick={(e) => handleLike(e, activeVideo.id)}
                 className="flex flex-col items-center gap-1 cursor-pointer group"
+                title="Like Reel"
               >
                 <div
                   className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md transition-all shadow-md group-hover:scale-115 ${
@@ -584,26 +584,25 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
                 </span>
               </button>
 
-              {/* Details Info Toggle */}
-              <button
-                type="button"
-                onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
-                className="flex flex-col items-center gap-1 cursor-pointer group"
-              >
-                <div className="w-11 h-11 rounded-full bg-black/40 border border-white/25 text-white flex items-center justify-center backdrop-blur-md group-hover:scale-115 group-hover:bg-white/20 transition-all">
-                  <Layers className="w-5 h-5" />
-                </div>
-                <span className="text-[10px] font-bold">Details</span>
-              </button>
-
-              {/* Audio / Sound Toggle */}
+              {/* Sound / Mute Toggle */}
               <button
                 type="button"
                 onClick={toggleMute}
                 className="flex flex-col items-center gap-1 cursor-pointer group"
+                title={isMuted ? 'Unmute' : 'Mute'}
               >
-                <div className="w-11 h-11 rounded-full bg-black/40 border border-white/25 text-white flex items-center justify-center backdrop-blur-md group-hover:scale-115 transition-all">
-                  {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                <div
+                  className={`w-11 h-11 rounded-full border border-white/25 flex items-center justify-center backdrop-blur-md group-hover:scale-115 transition-all ${
+                    !isMuted
+                      ? 'bg-[#541224] text-white shadow-lg ring-2 ring-[#F4B8C5]'
+                      : 'bg-black/40 text-white'
+                  }`}
+                >
+                  {isMuted ? (
+                    <VolumeX className="w-5 h-5 text-gray-300" />
+                  ) : (
+                    <Volume2 className="w-5 h-5 text-[#FCE7EC] animate-pulse" />
+                  )}
                 </div>
                 <span className="text-[10px] font-bold">{isMuted ? 'Muted' : 'Sound'}</span>
               </button>
@@ -613,6 +612,7 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
                 type="button"
                 onClick={(e) => handleShare(e, activeVideo)}
                 className="flex flex-col items-center gap-1 cursor-pointer group"
+                title="Share Reel"
               >
                 <div className="w-11 h-11 rounded-full bg-black/40 border border-white/25 text-white flex items-center justify-center backdrop-blur-md group-hover:scale-115 transition-all">
                   <Share2 className="w-5 h-5" />
@@ -621,8 +621,16 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
               </button>
             </div>
 
+            {/* Hidden Dedicated Audio Player (1 song assigned per video) */}
+            <audio
+              ref={audioRef}
+              src={activeVideo.music_url || '/audio/raga-yaman-sitar.mp3'}
+              loop
+              preload="auto"
+            />
+
             {/* Bottom Scrim & Reel Caption Area */}
-            <div className="absolute bottom-0 inset-x-0 z-30 p-5 pt-12 bg-gradient-to-t from-black via-black/80 to-transparent space-y-3.5 text-white">
+            <div className="absolute bottom-0 inset-x-0 z-30 p-5 pt-8 bg-gradient-to-t from-black via-black/85 to-transparent space-y-3 text-white">
               {/* Progress Bar */}
               <div className="w-full bg-white/25 h-1 rounded-full overflow-hidden">
                 <div
@@ -631,34 +639,44 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
                 />
               </div>
 
-              {/* Caption & Service Info */}
-              <div className="space-y-1.5 pr-14">
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full bg-[#541224] text-[#FCE7EC] text-[10px] font-bold uppercase tracking-wider">
-                    {activeVideo.category.toUpperCase()}
-                  </span>
-                  <span className="text-gray-300 text-xs font-semibold">
-                    Durga Beauty Parlour
-                  </span>
-                </div>
+              {/* 1 Song Per Video: Clean Minimalist Music Attribution Pill */}
+              <button
+                type="button"
+                onClick={toggleMute}
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/50 hover:bg-black/70 backdrop-blur-md text-white/90 border border-white/20 transition-all text-xs cursor-pointer group"
+                title={isMuted ? 'Tap to unmute music' : 'Tap to mute music'}
+              >
+                <Music
+                  className={`w-3.5 h-3.5 text-[#F4B8C5] shrink-0 ${!isMuted && isPlaying ? 'animate-spin' : ''}`}
+                  style={{ animationDuration: '4s' }}
+                />
+                <span className="truncate max-w-[200px] text-[11px] font-medium text-[#FCE7EC]">
+                  {activeVideo.music_title || 'Durga Salon Music'}
+                </span>
+                <span
+                  className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
+                    isMuted ? 'bg-rose-500/40 text-rose-200' : 'bg-emerald-500/40 text-emerald-200'
+                  }`}
+                >
+                  {isMuted ? 'Muted' : 'Sound On 🎵'}
+                </span>
+              </button>
 
-                <h3 className="font-serif text-xl font-bold leading-tight text-white drop-shadow-sm">
+              {/* Caption & Service Info */}
+              <div className="space-y-1 pr-14">
+                <h3 className="font-serif text-lg sm:text-xl font-bold leading-tight text-white drop-shadow-sm">
                   {activeVideo.title}
                 </h3>
-
-                {activeVideo.description && (
-                  <p
-                    className={`text-xs text-gray-200 leading-relaxed font-light ${
-                      isDetailsExpanded ? 'line-clamp-none' : 'line-clamp-2'
-                    }`}
-                  >
-                    {activeVideo.description}
+                {activeVideo.service_name && (
+                  <p className="text-[11px] text-[#F8CAD5] font-medium flex items-center gap-1.5">
+                    <Sparkles className="w-3 h-3 text-[#F4B8C5] shrink-0" />
+                    <span>{activeVideo.service_name}</span>
                   </p>
                 )}
               </div>
 
-              {/* Call-to-Action Bar: "Book This Makeover Look" */}
-              <div className="pt-2 flex items-center gap-3">
+              {/* Direct Booking CTA Button */}
+              <div className="pt-1 flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -693,3 +711,4 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
     </section>
   );
 };
+export default MakeoverReelsSection;

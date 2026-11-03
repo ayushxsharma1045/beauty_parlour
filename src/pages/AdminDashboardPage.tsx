@@ -10,6 +10,7 @@ import {
   Settings,
   Users,
   CheckCircle2,
+  Check,
   XCircle,
   Clock,
   TrendingUp,
@@ -39,10 +40,13 @@ import {
   UserPlus,
   ShieldAlert,
   ArrowRight,
+  ArrowLeft,
+  Home,
   Video,
   Film,
   Sliders,
-  Heart
+  Heart,
+  BarChart3
 } from 'lucide-react';
 import {
   AdminStats,
@@ -58,6 +62,7 @@ import {
 } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { AdminAnalyticsDashboard } from '../components/AdminAnalyticsDashboard';
 
 export const AdminDashboardPage: React.FC = () => {
   const { user, token, isAdmin, isStaff, login, logout } = useAuth();
@@ -71,13 +76,19 @@ export const AdminDashboardPage: React.FC = () => {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState('');
 
-  // Admin Gateway Authentication Mode ('signin' | 'register')
-  const [adminAuthMode, setAdminAuthMode] = useState<'signin' | 'register'>('signin');
+  // Admin Gateway Authentication Mode ('signin' | 'register_admin' | 'register_staff')
+  const [adminAuthMode, setAdminAuthMode] = useState<'signin' | 'register_admin' | 'register_staff'>('signin');
   const [publicAdminStatus, setPublicAdminStatus] = useState<{
     count: number;
     maxLimit: number;
     canRegisterAdmin: boolean;
   } | null>(null);
+  const [publicStaffStatus, setPublicStaffStatus] = useState<{
+    count: number;
+    maxLimit: number;
+    canRegisterStaff: boolean;
+  } | null>(null);
+
   const [regAdminForm, setRegAdminForm] = useState({
     name: '',
     email: '',
@@ -86,6 +97,19 @@ export const AdminDashboardPage: React.FC = () => {
     confirmPassword: ''
   });
   const [isRegisteringAdmin, setIsRegisteringAdmin] = useState(false);
+
+  // Staff Self-Registration Form (Requires Admin Approval)
+  const [regStaffForm, setRegStaffForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    designation: 'Senior Hair Stylist',
+    password: '',
+    confirmPassword: ''
+  });
+  const [isRegisteringStaff, setIsRegisteringStaff] = useState(false);
+  const [staffSuccessMessage, setStaffSuccessMessage] = useState('');
+  const [staffList, setStaffList] = useState<User[]>([]);
 
   // Edit Logged-in Administrator's Profile & Credentials
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
@@ -99,7 +123,7 @@ export const AdminDashboardPage: React.FC = () => {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'appointments' | 'services' | 'products' | 'gallery' | 'videos' | 'admins' | 'logs' | 'promotions' | 'settings'
+    'overview' | 'analytics' | 'appointments' | 'services' | 'products' | 'gallery' | 'videos' | 'admins' | 'logs' | 'promotions' | 'settings'
   >('overview');
 
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -113,14 +137,16 @@ export const AdminDashboardPage: React.FC = () => {
   const [isAddVideoOpen, setIsAddVideoOpen] = useState(false);
   const [newVideoForm, setNewVideoForm] = useState({
     title: '',
-    category: 'bridal',
+    category: 'facial',
     video_url: '',
     thumbnail_url: '',
-    duration: '0:30',
+    duration: '0:35',
     before_image: '',
     after_image: '',
     service_name: '',
-    description: ''
+    description: '',
+    music_url: '/audio/raga-yaman-sitar.mp3',
+    music_title: 'Raga Yaman - Peaceful Sitar & Tanpura'
   });
   const [isSavingVideo, setIsSavingVideo] = useState(false);
   const [adminLogs, setAdminLogs] = useState<AdminLog[]>([]);
@@ -176,7 +202,7 @@ export const AdminDashboardPage: React.FC = () => {
     setIsLoading(true);
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      const [statsRes, apptsRes, servicesRes, productsRes, promosRes, settingsRes, galleryRes, videosRes, logsRes, adminsRes] =
+      const [statsRes, apptsRes, servicesRes, productsRes, promosRes, settingsRes, galleryRes, videosRes, logsRes, adminsRes, staffRes] =
         await Promise.all([
           fetch('/api/admin/stats', { headers }),
           fetch('/api/appointments', { headers }),
@@ -186,8 +212,9 @@ export const AdminDashboardPage: React.FC = () => {
           fetch('/api/settings'),
           fetch('/api/gallery'),
           fetch('/api/videos'),
-          fetch('/api/admin/logs', { headers }),
-          fetch('/api/admin/admins', { headers })
+          isAdmin ? fetch('/api/admin/logs', { headers }) : Promise.resolve(null),
+          isAdmin ? fetch('/api/admin/admins', { headers }) : Promise.resolve(null),
+          isAdmin ? fetch('/api/admin/staff-list', { headers }) : Promise.resolve(null)
         ]);
 
       if (statsRes.ok) setStats(await statsRes.json());
@@ -198,12 +225,15 @@ export const AdminDashboardPage: React.FC = () => {
       if (settingsRes.ok) setSettings(await settingsRes.json());
       if (galleryRes.ok) setGalleryPhotos(await galleryRes.json());
       if (videosRes.ok) setMakeoverVideos(await videosRes.json());
-      if (logsRes.ok) setAdminLogs(await logsRes.json());
-      if (adminsRes.ok) {
+      if (logsRes && logsRes.ok) setAdminLogs(await logsRes.json());
+      if (adminsRes && adminsRes.ok) {
         const aData = await adminsRes.json();
         setAdminsList(aData.admins);
         setAdminCount(aData.count);
         setCanAddAdmin(aData.canAddAdmin);
+      }
+      if (staffRes && staffRes.ok) {
+        setStaffList(await staffRes.json());
       }
     } catch (err) {
       console.error('Failed to load admin data:', err);
@@ -219,6 +249,13 @@ export const AdminDashboardPage: React.FC = () => {
     }
   }, [token, isAdmin, isStaff]);
 
+  // Keep non-admin staff away from restricted tabs
+  useEffect(() => {
+    if (user && !isAdmin && ['analytics', 'admins', 'logs', 'promotions', 'settings'].includes(activeTab)) {
+      setActiveTab('overview');
+    }
+  }, [isAdmin, activeTab, user]);
+
   // Check admin availability status for login gateway
   const fetchPublicAdminStatus = async () => {
     try {
@@ -232,8 +269,22 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  // Check staff availability status (Max 10 staff) for login gateway
+  const fetchPublicStaffStatus = async () => {
+    try {
+      const res = await fetch('/api/auth/staff-status');
+      if (res.ok) {
+        const data = await res.json();
+        setPublicStaffStatus(data);
+      }
+    } catch (err) {
+      console.error('Failed to load staff status:', err);
+    }
+  };
+
   useEffect(() => {
     fetchPublicAdminStatus();
+    fetchPublicStaffStatus();
   }, []);
 
   // Handle Admin Portal Login
@@ -265,7 +316,7 @@ export const AdminDashboardPage: React.FC = () => {
       }
 
       login(data.token, data.user);
-      showToast(`Welcome back, ${data.user.name}! Administrator session authorized.`, 'success');
+      showToast(`Welcome back, ${data.user.name}! ${data.user.role === 'admin' ? 'Administrator' : 'Staff'} session authorized.`, 'success');
     } catch {
       setLoginError('Connection error while contacting salon authentication server.');
     } finally {
@@ -318,6 +369,119 @@ export const AdminDashboardPage: React.FC = () => {
       setLoginError('Network connection error while registering administrator.');
     } finally {
       setIsRegisteringAdmin(false);
+    }
+  };
+
+  // Handle Staff Self-Registration from Gateway (Capacity limit 10, requires Admin Approval)
+  const handleRegisterStaffGateway = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    setStaffSuccessMessage('');
+
+    if (!regStaffForm.name.trim() || !regStaffForm.email.trim() || !regStaffForm.password) {
+      setLoginError('Full name, email ID, and password are required.');
+      return;
+    }
+
+    if (regStaffForm.password.length < 6) {
+      setLoginError('Password must be at least 6 characters.');
+      return;
+    }
+
+    if (regStaffForm.password !== regStaffForm.confirmPassword) {
+      setLoginError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setIsRegisteringStaff(true);
+    try {
+      const res = await fetch('/api/auth/register-staff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: regStaffForm.name.trim(),
+          email: regStaffForm.email.trim(),
+          phone: regStaffForm.phone.trim(),
+          designation: regStaffForm.designation,
+          password: regStaffForm.password
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setLoginError(data.error || 'Failed to submit staff registration.');
+        return;
+      }
+
+      setStaffSuccessMessage(data.message || 'Staff registration submitted! Pending salon administrator approval.');
+      setRegStaffForm({
+        name: '',
+        email: '',
+        phone: '',
+        designation: 'Senior Hair Stylist',
+        password: '',
+        confirmPassword: ''
+      });
+      fetchPublicStaffStatus();
+    } catch {
+      setLoginError('Network connection error while submitting staff registration.');
+    } finally {
+      setIsRegisteringStaff(false);
+    }
+  };
+
+  // Administrator approving a staff member
+  const handleApproveStaff = async (staffId: string | number) => {
+    try {
+      const res = await fetch(`/api/admin/staff/${staffId}/approve`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Failed to approve staff account.', 'error');
+        return;
+      }
+      showToast(data.message || 'Staff member approved successfully! They can now log in.', 'success');
+      // Refresh staff list & logs
+      const [staffRes, logsRes] = await Promise.all([
+        fetch('/api/admin/staff-list', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/admin/logs', { headers: { Authorization: `Bearer ${token}` } })
+      ]);
+      if (staffRes.ok) setStaffList(await staffRes.json());
+      if (logsRes.ok) setAdminLogs(await logsRes.json());
+      fetchPublicStaffStatus();
+    } catch {
+      showToast('Error communicating with server.', 'error');
+    }
+  };
+
+  // Administrator removing or rejecting a staff member
+  const handleRejectStaff = async (staffId: string | number, staffName: string) => {
+    if (!confirm(`Are you sure you want to remove or reject staff member "${staffName}"?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/staff/${staffId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Failed to remove staff account.', 'error');
+        return;
+      }
+      showToast(data.message || 'Staff registration removed.', 'info');
+      // Refresh staff list & logs
+      const [staffRes, logsRes] = await Promise.all([
+        fetch('/api/admin/staff-list', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/admin/logs', { headers: { Authorization: `Bearer ${token}` } })
+      ]);
+      if (staffRes.ok) setStaffList(await staffRes.json());
+      if (logsRes.ok) setAdminLogs(await logsRes.json());
+      fetchPublicStaffStatus();
+    } catch {
+      showToast('Error communicating with server.', 'error');
     }
   };
 
@@ -773,10 +937,23 @@ export const AdminDashboardPage: React.FC = () => {
   // Handle Save Makeover Video Reel
   const handleSaveVideo = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newVideoForm.title.trim() || !newVideoForm.thumbnail_url.trim()) {
-      showToast('Video title and cover thumbnail image are required.', 'error');
+    if (!newVideoForm.title.trim()) {
+      showToast('Video title is required.', 'error');
       return;
     }
+
+    const effectiveThumb =
+      newVideoForm.thumbnail_url.trim() ||
+      newVideoForm.after_image.trim() ||
+      newVideoForm.before_image.trim() ||
+      '/images/reels/facial-massage-after.jpg';
+
+    const payload = {
+      ...newVideoForm,
+      thumbnail_url: effectiveThumb,
+      after_image: newVideoForm.after_image.trim() || effectiveThumb,
+      duration: newVideoForm.duration.trim() || '0:30'
+    };
 
     setIsSavingVideo(true);
     try {
@@ -786,7 +963,7 @@ export const AdminDashboardPage: React.FC = () => {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(newVideoForm)
+        body: JSON.stringify(payload)
       });
 
       if (res.ok) {
@@ -794,14 +971,16 @@ export const AdminDashboardPage: React.FC = () => {
         setIsAddVideoOpen(false);
         setNewVideoForm({
           title: '',
-          category: 'bridal',
+          category: 'facial',
           video_url: '',
           thumbnail_url: '',
-          duration: '0:30',
+          duration: '0:35',
           before_image: '',
           after_image: '',
           service_name: '',
-          description: ''
+          description: '',
+          music_url: '/audio/raga-yaman-sitar.mp3',
+          music_title: 'Raga Yaman - Peaceful Sitar & Tanpura'
         });
 
         // Refresh videos & logs
@@ -929,9 +1108,55 @@ export const AdminDashboardPage: React.FC = () => {
     const occupiedSlots = publicAdminStatus?.count ?? 1;
 
     return (
-      <div className="min-h-[85vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-[#FDFBF7]">
+      <div className="min-h-[85vh] flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-[#FDFBF7]">
+        {/* Top Back Action Bar */}
+        <div className="w-full max-w-md mb-4 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => {
+              if (window.history.length > 1) {
+                navigate(-1);
+              } else {
+                navigate('/');
+              }
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold text-[#541224] bg-white border border-[#D4A5AC]/50 shadow-xs hover:bg-[#FCE7EC]/50 hover:border-[#B76E79] transition-all cursor-pointer group"
+            id="admin-gateway-back-button"
+          >
+            <ArrowLeft className="w-4 h-4 text-[#B76E79] group-hover:-translate-x-1 transition-transform" />
+            <span>Back to Previous Page</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold text-gray-600 hover:text-[#541224] bg-white border border-gray-200 shadow-xs hover:bg-[#FCE7EC]/30 transition-all cursor-pointer"
+            id="admin-gateway-home-button"
+          >
+            <Home className="w-3.5 h-3.5 text-[#B76E79]" />
+            <span>Salon Home</span>
+          </button>
+        </div>
+
         <div className="max-w-md w-full space-y-6 bg-white p-8 sm:p-10 rounded-3xl border border-[#D4A5AC]/40 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-2.5 bg-gradient-to-r from-[#541224] via-[#B76E79] to-[#541224]" />
+
+          {/* Quick Corner Back button */}
+          <button
+            type="button"
+            onClick={() => {
+              if (window.history.length > 1) {
+                navigate(-1);
+              } else {
+                navigate('/');
+              }
+            }}
+            className="absolute top-4 left-4 p-2 rounded-full bg-gray-100 hover:bg-[#FCE7EC] text-gray-600 hover:text-[#541224] transition-colors cursor-pointer flex items-center gap-1 text-xs z-10"
+            title="Go back to previous page"
+          >
+            <ArrowLeft className="w-4 h-4 text-[#B76E79]" />
+            <span className="hidden sm:inline text-[11px] font-medium">Back</span>
+          </button>
 
           {/* Header */}
           <div className="text-center space-y-2.5">
@@ -951,26 +1176,40 @@ export const AdminDashboardPage: React.FC = () => {
               </p>
             </div>
 
-            {/* 2-Admin Allocation Status Pill */}
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-50 border border-gray-200 text-[11px] font-semibold text-gray-700">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>
-                {occupiedSlots} of 2 Admin Slots Assigned
-              </span>
-              <span className="text-gray-400">|</span>
-              <span className={canRegister ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>
-                {canRegister ? '1 Slot Open' : 'Limit Reached (2/2)'}
-              </span>
+            {/* Allocation Status Pills */}
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-50 border border-gray-200 text-[11px] font-semibold text-gray-700">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>
+                  {occupiedSlots} of 2 Admin Slots
+                </span>
+                <span className="text-gray-400">|</span>
+                <span className={canRegister ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>
+                  {canRegister ? '1 Open' : '2/2 Full'}
+                </span>
+              </div>
+
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 border border-purple-200 text-[11px] font-semibold text-purple-900">
+                <span className="w-2 h-2 rounded-full bg-purple-500" />
+                <span>
+                  Staff Team: {publicStaffStatus ? publicStaffStatus.count : 1} / 10 Max
+                </span>
+                <span className="text-purple-300">|</span>
+                <span className={(publicStaffStatus?.canRegisterStaff ?? true) ? 'text-purple-700 font-bold' : 'text-rose-700 font-bold'}>
+                  {(publicStaffStatus?.canRegisterStaff ?? true) ? 'Slots Open' : 'Team Full'}
+                </span>
+              </div>
             </div>
           </div>
 
           {/* Mode Switcher Tabs */}
-          <div className="flex p-1 bg-gray-100 rounded-full">
+          <div className="flex p-1 bg-gray-100 rounded-full gap-1">
             <button
               type="button"
               onClick={() => {
                 setAdminAuthMode('signin');
                 setLoginError('');
+                setStaffSuccessMessage('');
               }}
               className={`flex-1 py-2 text-xs font-semibold rounded-full transition-all cursor-pointer ${
                 adminAuthMode === 'signin'
@@ -978,22 +1217,38 @@ export const AdminDashboardPage: React.FC = () => {
                   : 'text-gray-500 hover:text-gray-800'
               }`}
             >
-              Sign In with My ID
+              Sign In
             </button>
             <button
               type="button"
               onClick={() => {
-                setAdminAuthMode('register');
+                setAdminAuthMode('register_staff');
                 setLoginError('');
+                setStaffSuccessMessage('');
               }}
-              className={`flex-1 py-2 text-xs font-semibold rounded-full transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                adminAuthMode === 'register'
+              className={`flex-1 py-2 text-xs font-semibold rounded-full transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                adminAuthMode === 'register_staff'
+                  ? 'bg-white text-[#541224] shadow-xs'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              <span>Register as Staff</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAdminAuthMode('register_admin');
+                setLoginError('');
+                setStaffSuccessMessage('');
+              }}
+              className={`flex-1 py-2 text-xs font-semibold rounded-full transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                adminAuthMode === 'register_admin'
                   ? 'bg-white text-[#541224] shadow-xs'
                   : 'text-gray-500 hover:text-gray-800'
               }`}
             >
               {!canRegister && <Lock className="w-3 h-3 text-gray-400" />}
-              <span>Register My Admin ID</span>
+              <span>Register Admin</span>
             </button>
           </div>
 
@@ -1025,12 +1280,37 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
           )}
 
+          {/* Staff Success Message Banner */}
+          {staffSuccessMessage && (
+            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-emerald-900">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Staff Registration Submitted!</span>
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                {staffSuccessMessage}
+              </p>
+              <div className="pt-1 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminAuthMode('signin');
+                    setStaffSuccessMessage('');
+                  }}
+                  className="px-3 py-1 rounded-full bg-emerald-600 text-white font-semibold text-[11px] hover:bg-emerald-700 cursor-pointer"
+                >
+                  Return to Sign In
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* TAB 1: SIGN IN WITH MY ID */}
           {adminAuthMode === 'signin' && (
             <form onSubmit={handleAdminLogin} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                  My Administrator ID (Email or Mobile) *
+                  My Administrator or Staff ID (Email or Mobile) *
                 </label>
                 <input
                   type="text"
@@ -1066,37 +1346,233 @@ export const AdminDashboardPage: React.FC = () => {
                 />
               </div>
 
+              <div className="p-3 rounded-2xl bg-[#FDF2F4] border border-[#D4A5AC]/40 text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-gray-500 uppercase tracking-wider block font-semibold">Master Administrator</span>
+                    <span className="font-mono text-[#541224] font-bold">admin@durgasalon.com</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdminEmail('admin@durgasalon.com');
+                      setAdminPassword('DurgaAdmin@2026');
+                    }}
+                    className="px-2.5 py-1 rounded-full bg-white hover:bg-[#FCE7EC] border border-[#D4A5AC]/60 text-[10px] font-bold text-[#541224] transition-all cursor-pointer shadow-xs"
+                  >
+                    ⚡ Fill Admin
+                  </button>
+                </div>
+                <div className="pt-2 border-t border-[#D4A5AC]/30 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-gray-500 uppercase tracking-wider block font-semibold">Approved Senior Stylist / Staff</span>
+                    <span className="font-mono text-[#541224] font-bold">staff@durgasalon.com</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdminEmail('staff@durgasalon.com');
+                      setAdminPassword('DurgaAdmin@2026');
+                    }}
+                    className="px-2.5 py-1 rounded-full bg-white hover:bg-[#FCE7EC] border border-[#D4A5AC]/60 text-[10px] font-bold text-[#541224] transition-all cursor-pointer shadow-xs"
+                  >
+                    ⚡ Fill Staff
+                  </button>
+                </div>
+              </div>
+
               <button
                 type="submit"
                 disabled={isLoggingIn}
                 className="w-full py-3 rounded-full text-xs font-semibold uppercase tracking-wider text-white maroon-gradient shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <KeyRound className="w-4 h-4 text-[#F4B8C5]" />
-                <span>{isLoggingIn ? 'Authenticating...' : 'Sign In with My ID'}</span>
+                <span>{isLoggingIn ? 'Authenticating...' : 'Sign In to Portal'}</span>
               </button>
 
-              {canRegister && (
-                <div className="pt-2 text-center">
-                  <p className="text-xs text-gray-500">
-                    Need to set up your own Administrator ID?{' '}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAdminAuthMode('register');
-                        setLoginError('');
-                      }}
-                      className="text-[#541224] font-bold underline cursor-pointer hover:text-[#B76E79]"
-                    >
-                      Register My ID as Admin →
-                    </button>
-                  </p>
-                </div>
-              )}
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2 text-center text-xs text-gray-500">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminAuthMode('register_staff');
+                    setLoginError('');
+                  }}
+                  className="text-[#541224] font-bold underline cursor-pointer hover:text-[#B76E79]"
+                >
+                  Register as Staff →
+                </button>
+                {canRegister && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdminAuthMode('register_admin');
+                      setLoginError('');
+                    }}
+                    className="text-gray-500 underline cursor-pointer hover:text-gray-800"
+                  >
+                    Register Admin ID →
+                  </button>
+                )}
+              </div>
             </form>
           )}
 
-          {/* TAB 2: REGISTER MY OWN ADMIN ID (Max 2 Admins Policy) */}
-          {adminAuthMode === 'register' && (
+          {/* TAB 2: REGISTER AS SALON STAFF (Max 10 Staff, Requires Admin Approval) */}
+          {adminAuthMode === 'register_staff' && (
+            <div>
+              {publicStaffStatus && !publicStaffStatus.canRegisterStaff ? (
+                <div className="p-6 rounded-2xl bg-amber-50 border border-amber-200 text-center space-y-3">
+                  <div className="inline-flex p-3 rounded-full bg-amber-100 text-amber-800">
+                    <Lock className="w-6 h-6 text-amber-700" />
+                  </div>
+                  <h4 className="font-serif font-bold text-base text-amber-900">
+                    Staff Team Registration Full
+                  </h4>
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    The maximum capacity of <strong>10 staff members</strong> has been reached. Please contact the salon owner or administrator.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setAdminAuthMode('signin')}
+                    className="px-5 py-2 rounded-full text-xs font-semibold bg-white border border-amber-300 text-[#541224] hover:bg-amber-50 cursor-pointer shadow-xs transition-all"
+                  >
+                    Return to Sign In
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleRegisterStaffGateway} className="space-y-3.5">
+                  <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200/80 text-xs text-amber-900 space-y-1">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0" />
+                      <span>Admin Approval Required Before Login</span>
+                    </div>
+                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                      Register as a salon staff member. Once submitted, the Salon Owner / Administrator must approve your account from the Admin Dashboard before you can sign in.
+                    </p>
+                    <div className="text-[10px] text-amber-700 font-semibold pt-0.5">
+                      • Staff Team Limit: Maximum 10 members ({publicStaffStatus ? publicStaffStatus.count : 1}/10 active)
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Full Staff Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Priya Sharma"
+                      value={regStaffForm.name}
+                      onChange={(e) => setRegStaffForm({ ...regStaffForm, name: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:border-[#B76E79] focus:ring-1 focus:ring-[#B76E79] outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Staff Email ID *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="e.g. priya@durgasalon.com"
+                      value={regStaffForm.email}
+                      onChange={(e) => setRegStaffForm({ ...regStaffForm, email: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:border-[#B76E79] focus:ring-1 focus:ring-[#B76E79] outline-none font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Mobile Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="+91 98765 43210"
+                      value={regStaffForm.phone}
+                      onChange={(e) => setRegStaffForm({ ...regStaffForm, phone: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:border-[#B76E79] focus:ring-1 focus:ring-[#B76E79] outline-none font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Salon Role / Designation *
+                    </label>
+                    <select
+                      value={regStaffForm.designation}
+                      onChange={(e) => setRegStaffForm({ ...regStaffForm, designation: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:border-[#B76E79] focus:ring-1 focus:ring-[#B76E79] outline-none bg-white font-medium"
+                    >
+                      <option value="Senior Hair Stylist">Senior Hair Stylist</option>
+                      <option value="Bridal & HD Makeup Artist">Bridal & HD Makeup Artist</option>
+                      <option value="Skin Care & Facial Specialist">Skin Care & Facial Specialist</option>
+                      <option value="Hair Colourist & Spa Therapist">Hair Colourist & Spa Therapist</option>
+                      <option value="Nail Art & Lash Expert">Nail Art & Lash Expert</option>
+                      <option value="Junior Stylist & Salon Assistant">Junior Stylist & Salon Assistant</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        Password *
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        placeholder="Min 6 characters"
+                        value={regStaffForm.password}
+                        onChange={(e) => setRegStaffForm({ ...regStaffForm, password: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:border-[#B76E79] focus:ring-1 focus:ring-[#B76E79] outline-none font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        Confirm Password *
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        placeholder="Confirm password"
+                        value={regStaffForm.confirmPassword}
+                        onChange={(e) => setRegStaffForm({ ...regStaffForm, confirmPassword: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:border-[#B76E79] focus:ring-1 focus:ring-[#B76E79] outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isRegisteringStaff}
+                    className="w-full py-3 rounded-full text-xs font-semibold uppercase tracking-wider text-white maroon-gradient shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
+                  >
+                    <UserPlus className="w-4 h-4 text-[#F4B8C5]" />
+                    <span>{isRegisteringStaff ? 'Submitting Registration...' : 'Submit Staff Registration (Requires Approval)'}</span>
+                  </button>
+
+                  <div className="pt-2 text-center">
+                    <p className="text-xs text-gray-500">
+                      Already registered and approved?{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAdminAuthMode('signin');
+                          setLoginError('');
+                        }}
+                        className="text-[#541224] font-bold underline cursor-pointer hover:text-[#B76E79]"
+                      >
+                        Sign in with My ID →
+                      </button>
+                    </p>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: REGISTER MY OWN ADMIN ID (Max 2 Admins Policy) */}
+          {adminAuthMode === 'register_admin' && (
             <div>
               {!canRegister ? (
                 <div className="p-6 rounded-2xl bg-amber-50 border border-amber-200 text-center space-y-3">
@@ -1227,6 +1703,31 @@ export const AdminDashboardPage: React.FC = () => {
               )}
             </div>
           )}
+
+          {/* Bottom Return to Salon Website */}
+          <div className="pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="flex items-center gap-1.5 text-gray-600 hover:text-[#541224] font-medium transition-colors cursor-pointer"
+            >
+              <Home className="w-3.5 h-3.5 text-[#B76E79]" />
+              <span>Return to Durga Beauty Parlour</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.history.length > 1) {
+                  navigate(-1);
+                } else {
+                  navigate('/');
+                }
+              }}
+              className="text-[11px] text-[#B76E79] hover:underline cursor-pointer font-medium"
+            >
+              ← Back
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1241,19 +1742,30 @@ export const AdminDashboardPage: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-gray-200">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#541224] text-white">
-              Salon Management Console
+            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+              isAdmin ? 'bg-[#541224] text-white' : 'bg-purple-900 text-purple-100'
+            }`}>
+              {isAdmin ? 'Master Administrator Console' : 'Operational Staff Console'}
             </span>
             <span className="text-xs text-gray-500 font-medium">
-              • Authenticated as <strong className="text-gray-900">{user.name}</strong> ({user.role})
+              • Signed in as <strong className="text-gray-900">{user.name}</strong> ({isAdmin ? 'Owner / Admin' : user.designation || 'Staff'})
             </span>
           </div>
           <h1 className="font-serif text-3xl font-bold text-[#541224] mt-1">
-            Durga Beauty Parlour Owner Dashboard
+            {isAdmin ? 'Durga Beauty Parlour Owner Dashboard' : 'Durga Beauty Parlour Staff Workspace'}
           </h1>
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/')}
+            className="px-4 py-2 rounded-full border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Go to customer website"
+          >
+            <Home className="w-3.5 h-3.5 text-[#B76E79]" />
+            <span>View Website</span>
+          </button>
+
           <button
             onClick={loadAllData}
             className="px-4 py-2 rounded-full border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer"
@@ -1346,54 +1858,84 @@ export const AdminDashboardPage: React.FC = () => {
           <span>Makeover Reels ({makeoverVideos.length})</span>
         </button>
 
-        {/* TAB FOR 2-ADMIN MAXIMUM ALLOCATION RULE */}
-        <button
-          onClick={() => setActiveTab('admins')}
-          className={`pb-3 px-1 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-            activeTab === 'admins'
-              ? 'border-[#541224] text-[#541224]'
-              : 'border-transparent text-gray-400 hover:text-gray-700'
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4" />
-          <span>Admins ({adminCount}/2)</span>
-        </button>
+        {/* ADMIN-ONLY TABS */}
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`pb-3 px-1 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'analytics'
+                ? 'border-[#541224] text-[#541224]'
+                : 'border-transparent text-gray-400 hover:text-gray-700'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4 text-[#B76E79]" />
+            <span>Analytics & Graphs</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-[#FCE7EC] text-[#541224] text-[9px] font-bold">
+              Admin Only
+            </span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('logs')}
-          className={`pb-3 px-1 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-            activeTab === 'logs'
-              ? 'border-[#541224] text-[#541224]'
-              : 'border-transparent text-gray-400 hover:text-gray-700'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span>Activity Logs ({adminLogs.length})</span>
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab('admins')}
+            className={`pb-3 px-1 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'admins'
+                ? 'border-[#541224] text-[#541224]'
+                : 'border-transparent text-gray-400 hover:text-gray-700'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>Admins & Staff</span>
+            {staffList.filter(s => s.is_approved === 0).length > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[9px] font-bold animate-pulse">
+                {staffList.filter(s => s.is_approved === 0).length} Pending
+              </span>
+            )}
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('promotions')}
-          className={`pb-3 px-1 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-            activeTab === 'promotions'
-              ? 'border-[#541224] text-[#541224]'
-              : 'border-transparent text-gray-400 hover:text-gray-700'
-          }`}
-        >
-          <Tag className="w-4 h-4" />
-          <span>Offers ({promotions.length})</span>
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab('logs')}
+            className={`pb-3 px-1 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'logs'
+                ? 'border-[#541224] text-[#541224]'
+                : 'border-transparent text-gray-400 hover:text-gray-700'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>Activity Logs ({adminLogs.length})</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('settings')}
-          className={`pb-3 px-1 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-            activeTab === 'settings'
-              ? 'border-[#541224] text-[#541224]'
-              : 'border-transparent text-gray-400 hover:text-gray-700'
-          }`}
-        >
-          <Settings className="w-4 h-4" />
-          <span>Settings</span>
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab('promotions')}
+            className={`pb-3 px-1 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'promotions'
+                ? 'border-[#541224] text-[#541224]'
+                : 'border-transparent text-gray-400 hover:text-gray-700'
+            }`}
+          >
+            <Tag className="w-4 h-4" />
+            <span>Offers ({promotions.length})</span>
+          </button>
+        )}
+
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`pb-3 px-1 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'settings'
+                ? 'border-[#541224] text-[#541224]'
+                : 'border-transparent text-gray-400 hover:text-gray-700'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            <span>Settings</span>
+          </button>
+        )}
       </div>
 
       {/* TAB 1: OVERVIEW & KPIS */}
@@ -1445,23 +1987,37 @@ export const AdminDashboardPage: React.FC = () => {
               </span>
             </div>
 
-            <div className="p-5 rounded-2xl bg-[#541224] text-white shadow-xs">
-              <span className="text-[10px] text-[#F8CAD5] uppercase tracking-wider block font-bold">
-                Earned Revenue
-              </span>
-              <span className="font-serif text-2xl font-bold mt-1 block">
-                ₹{stats.earned_revenue.toLocaleString('en-IN')}
-              </span>
-              <span className="text-[9px] text-[#FCE7EC]/70 mt-1 block">
-                *Only completed bookings
-              </span>
-            </div>
+            {isAdmin ? (
+              <div className="p-5 rounded-2xl bg-[#541224] text-white shadow-xs">
+                <span className="text-[10px] text-[#F8CAD5] uppercase tracking-wider block font-bold">
+                  Earned Revenue
+                </span>
+                <span className="font-serif text-2xl font-bold mt-1 block">
+                  ₹{stats.earned_revenue.toLocaleString('en-IN')}
+                </span>
+                <span className="text-[9px] text-[#FCE7EC]/70 mt-1 block">
+                  *Only completed bookings
+                </span>
+              </div>
+            ) : (
+              <div className="p-5 rounded-2xl bg-purple-900 text-white shadow-xs">
+                <span className="text-[10px] text-purple-200 uppercase tracking-wider block font-bold">
+                  Active Services
+                </span>
+                <span className="font-serif text-2xl font-bold mt-1 block">
+                  {services.length} Catalog Items
+                </span>
+                <span className="text-[9px] text-purple-200/70 mt-1 block">
+                  *Salon operations active
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="p-6 rounded-3xl bg-white border border-gray-200 shadow-xs space-y-4">
               <h3 className="font-serif text-base font-bold text-[#541224]">
-                Top 5 Services by Completed Revenue
+                {isAdmin ? 'Top 5 Services by Completed Revenue' : 'Top Services by Customer Bookings'}
               </h3>
               <div className="space-y-3">
                 {stats.popular_services.map((item, idx) => (
@@ -1470,9 +2026,11 @@ export const AdminDashboardPage: React.FC = () => {
                       <span className="font-semibold text-gray-900 block">{item.service_name}</span>
                       <span className="text-gray-400 text-[11px]">{item.bookings} appointments booked</span>
                     </div>
-                    <span className="font-serif font-bold text-emerald-700 text-sm">
-                      ₹{item.revenue.toLocaleString('en-IN')}
-                    </span>
+                    {isAdmin && (
+                      <span className="font-serif font-bold text-emerald-700 text-sm">
+                        ₹{item.revenue.toLocaleString('en-IN')}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1497,7 +2055,38 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Executive Analytics Shortcut Banner (Admin Only) */}
+          {isAdmin && (
+            <div className="p-6 rounded-3xl bg-gradient-to-r from-[#541224] via-[#751A32] to-[#B76E79] text-white shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-xs">
+                    Executive Portal • Admin Only
+                  </span>
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                </div>
+                <h3 className="font-serif text-xl font-bold">Interactive Salon Analytics & Performance Graphs</h3>
+                <p className="text-white/80 text-xs max-w-xl">
+                  Analyze revenue trajectory curves, service category market shares, peak day-of-week traffic, rush operating hours, and top VIP spenders.
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveTab('analytics')}
+                className="px-5 py-2.5 rounded-full bg-white text-[#541224] font-bold text-xs shadow-md hover:bg-[#FCE7EC] hover:scale-105 transition-all flex items-center gap-2 cursor-pointer shrink-0"
+              >
+                <BarChart3 className="w-4 h-4 text-[#541224]" />
+                <span>Launch Interactive Analytics</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
+      )}
+
+      {/* TAB: COMPREHENSIVE ANALYTICS & INTERACTIVE GRAPHS (ADMIN ONLY) */}
+      {isAdmin && activeTab === 'analytics' && token && (
+        <AdminAnalyticsDashboard token={token} />
       )}
 
       {/* TAB 2: APPOINTMENT MANAGEMENT WITH DATE GROUPING & FILTERING */}
@@ -1849,31 +2438,33 @@ export const AdminDashboardPage: React.FC = () => {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <h3 className="font-serif text-lg font-bold text-[#541224]">
-              Manage Hair & Facial Services
+              {isAdmin ? 'Manage Hair & Facial Services' : 'Hair & Facial Services Catalog'}
             </h3>
-            <button
-              onClick={() => {
-                setIsNewService(true);
-                setEditingService({
-                  category: 'haircoloring',
-                  name: '',
-                  description: '',
-                  duration_mins: 60,
-                  price: 700,
-                  price_short: 700,
-                  price_medium: 1000,
-                  price_long: 1400,
-                  suitable_skin: '',
-                  image_url: '/images/hair-coloring.jpg',
-                  is_popular: 0,
-                  is_active: 1
-                });
-              }}
-              className="px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-wider text-white maroon-gradient shadow-sm flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add New Service</span>
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  setIsNewService(true);
+                  setEditingService({
+                    category: 'haircoloring',
+                    name: '',
+                    description: '',
+                    duration_mins: 60,
+                    price: 700,
+                    price_short: 700,
+                    price_medium: 1000,
+                    price_long: 1400,
+                    suitable_skin: '',
+                    image_url: '/images/hair-coloring.jpg',
+                    is_popular: 0,
+                    is_active: 1
+                  });
+                }}
+                className="px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-wider text-white maroon-gradient shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add New Service</span>
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1892,31 +2483,35 @@ export const AdminDashboardPage: React.FC = () => {
 
                 <div className="pt-2 border-t border-gray-100 flex justify-between items-center text-[11px] text-gray-400">
                   <span>{s.duration_mins} mins</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setIsNewService(false);
-                        setEditingService(s);
-                      }}
-                      className="p-1 hover:text-[#541224] cursor-pointer"
-                      title="Edit"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteService(s.id)}
-                      className="p-1 hover:text-red-600 cursor-pointer"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  {isAdmin ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setIsNewService(false);
+                          setEditingService(s);
+                        }}
+                        className="p-1 hover:text-[#541224] cursor-pointer"
+                        title="Edit"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteService(s.id)}
+                        className="p-1 hover:text-red-600 cursor-pointer"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-gray-400">View Catalog</span>
+                  )}
                 </div>
               </div>
             ))}
           </div>
 
-          {editingService && (
+          {isAdmin && editingService && (
             <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
               <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center border-b pb-3">
@@ -2058,29 +2653,31 @@ export const AdminDashboardPage: React.FC = () => {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <h3 className="font-serif text-lg font-bold text-[#541224]">
-              Manage Botanical Beauty Products
+              {isAdmin ? 'Manage Botanical Beauty Products' : 'Botanical Beauty Products Inventory'}
             </h3>
-            <button
-              onClick={() => {
-                setIsNewProduct(true);
-                setEditingProduct({
-                  name: '',
-                  brand: 'Durga Botanica',
-                  category: 'facial_kits',
-                  size: '100 ml',
-                  price: 499,
-                  description: '',
-                  suitability: 'All Skin Types',
-                  in_stock: 1,
-                  is_used_in_salon: 1,
-                  image_url: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=800&q=80'
-                });
-              }}
-              className="px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-wider text-white maroon-gradient shadow-sm flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Product</span>
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  setIsNewProduct(true);
+                  setEditingProduct({
+                    name: '',
+                    brand: 'Durga Botanica',
+                    category: 'facial_kits',
+                    size: '100 ml',
+                    price: 499,
+                    description: '',
+                    suitability: 'All Skin Types',
+                    in_stock: 1,
+                    is_used_in_salon: 1,
+                    image_url: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=800&q=80'
+                  });
+                }}
+                className="px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-wider text-white maroon-gradient shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Product</span>
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2097,31 +2694,35 @@ export const AdminDashboardPage: React.FC = () => {
 
                 <div className="pt-2 border-t border-gray-100 flex justify-between items-center text-[11px]">
                   <span className="text-gray-400">{p.size}</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setIsNewProduct(false);
-                        setEditingProduct(p);
-                      }}
-                      className="p-1 hover:text-[#541224] cursor-pointer"
-                      title="Edit"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteProduct(p.id)}
-                      className="p-1 hover:text-red-600 cursor-pointer"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  {isAdmin ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setIsNewProduct(false);
+                          setEditingProduct(p);
+                        }}
+                        className="p-1 hover:text-[#541224] cursor-pointer"
+                        title="Edit"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteProduct(p.id)}
+                        className="p-1 hover:text-red-600 cursor-pointer"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-gray-400">Inventory Catalog</span>
+                  )}
                 </div>
               </div>
             ))}
           </div>
 
-          {editingProduct && (
+          {isAdmin && editingProduct && (
             <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
               <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center border-b pb-3">
@@ -2464,14 +3065,16 @@ export const AdminDashboardPage: React.FC = () => {
               onClick={() => {
                 setNewVideoForm({
                   title: '',
-                  category: 'bridal',
+                  category: 'facial',
                   video_url: '',
                   thumbnail_url: '',
-                  duration: '0:30',
+                  duration: '0:35',
                   before_image: '',
                   after_image: '',
                   service_name: '',
-                  description: ''
+                  description: '',
+                  music_url: '/audio/raga-yaman-sitar.mp3',
+                  music_title: 'Raga Yaman - Peaceful Sitar & Tanpura'
                 });
                 setIsAddVideoOpen(true);
               }}
@@ -2600,10 +3203,12 @@ export const AdminDashboardPage: React.FC = () => {
                         onChange={(e) => setNewVideoForm({ ...newVideoForm, category: e.target.value })}
                         className="w-full px-3.5 py-2.5 border rounded-xl focus:border-[#B76E79] outline-none cursor-pointer"
                       >
-                        <option value="bridal">👑 Bridal Makeover</option>
-                        <option value="hair">💇 Hair Transformation</option>
-                        <option value="festive">✨ Festive & Sagan Glam</option>
                         <option value="facial">🌸 Facial Glow Reveal</option>
+                        <option value="hair_spa">🧖‍♀️ Hair Spa & Scalp Therapy</option>
+                        <option value="hair_color">🎨 Hair Colors & Balayage</option>
+                        <option value="bridal">👑 Bridal Makeover</option>
+                        <option value="festive">✨ Festive & Sagan Glam</option>
+                        <option value="hair">💇 General Hair Transformation</option>
                         <option value="makeover">💄 General Makeover</option>
                       </select>
                     </div>
@@ -2620,6 +3225,52 @@ export const AdminDashboardPage: React.FC = () => {
                         className="w-full px-3.5 py-2.5 border rounded-xl focus:border-[#B76E79] outline-none font-mono"
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-gray-700 mb-1">
+                      Dedicated Background Music (1 Song per Video) 🎵
+                    </label>
+                    <select
+                      value={newVideoForm.music_url}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const tracks: Record<string, string> = {
+                          '/audio/mundian-to-bach-ke.mp3': 'Mundian To Bach Ke (Bhangra Anthem) - Panjabi MC',
+                          '/audio/mera-laung-gawacha.mp3': 'Mera Laung Gawacha (Desi Pop) - Bally Sagoo',
+                          '/audio/mast-kalandar-remix.mp3': 'Mast Kalandar (Modern Dance Beat Mix)',
+                          '/audio/bollywood-dance-beat.mp3': 'Chamiya No. 1 (Bollywood Dance Anthem)',
+                          '/audio/raga-yaman-sitar.mp3': 'Raga Yaman - Peaceful Sitar & Tanpura',
+                          '/audio/indian-bansuri-spa.mp3': 'Soothing Indian Bansuri Flute & Tanpura Spa',
+                          '/audio/raga-kaushi-kanra.mp3': 'Classical Raga Kaushi Kanra Sitar & Tabla',
+                          '/audio/raga-durga-salon.mp3': 'Raga Durga - Royal Sitar & Sarod Instrumental',
+                          '/audio/indian-sitar-raga.mp3': 'Celebratory Sitar & Tabla Raga'
+                        };
+                        setNewVideoForm({
+                          ...newVideoForm,
+                          music_url: val,
+                          music_title: tracks[val] || 'Indian Salon Music'
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 border rounded-xl focus:border-[#B76E79] outline-none cursor-pointer bg-white"
+                    >
+                      <optgroup label="🔥 Modern Hit Songs & Dance Beats">
+                        <option value="/audio/mundian-to-bach-ke.mp3">🔥 Mundian To Bach Ke (Bhangra Anthem) - Panjabi MC</option>
+                        <option value="/audio/mera-laung-gawacha.mp3">✨ Mera Laung Gawacha (Desi Pop) - Bally Sagoo</option>
+                        <option value="/audio/mast-kalandar-remix.mp3">⚡ Mast Kalandar (Modern Dance Beat Mix)</option>
+                        <option value="/audio/bollywood-dance-beat.mp3">💃 Chamiya No. 1 (Bollywood Dance Anthem)</option>
+                      </optgroup>
+                      <optgroup label="🌸 Classical Salon Spa & Ragas">
+                        <option value="/audio/raga-yaman-sitar.mp3">🌸 Meditative Raga Yaman Sitar & Tanpura (Facial & Glow)</option>
+                        <option value="/audio/indian-bansuri-spa.mp3">🧖‍♀️ Soothing Indian Bansuri Flute & Tanpura (Hair Spa Therapy)</option>
+                        <option value="/audio/raga-kaushi-kanra.mp3">🎨 Classical Raga Kaushi Kanra Sitar & Tabla (Hair Color)</option>
+                        <option value="/audio/raga-durga-salon.mp3">👑 Raga Durga - Royal Sitar & Sarod (Bridal Glam)</option>
+                        <option value="/audio/indian-sitar-raga.mp3">✨ Celebratory Sitar & Tabla Raga (Festive Sagan)</option>
+                      </optgroup>
+                    </select>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      This single song will automatically play when visitors watch this makeover reel.
+                    </p>
                   </div>
 
                   <div>
@@ -3250,6 +3901,131 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
             </div>
           )}
+          {/* SECTION: STAFF MEMBERS & PENDING APPROVALS */}
+          <div className="pt-8 border-t border-gray-200 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h4 className="font-serif text-lg font-bold text-[#541224] flex items-center gap-2">
+                  <Scissors className="w-5 h-5 text-[#B76E79]" />
+                  <span>Salon Staff Team & Approval Controls</span>
+                </h4>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Salon capacity limit: Maximum 10 staff members. Newly registered staff require your approval before they can sign in.
+                </p>
+              </div>
+
+              <div className="px-3.5 py-1.5 rounded-full bg-purple-50 border border-purple-200 text-xs font-bold text-purple-900 self-start sm:self-center">
+                Approved Staff: {staffList.filter(s => s.is_approved === 1).length} / 10 Max Capacity
+              </div>
+            </div>
+
+            {/* PENDING APPROVALS LIST */}
+            {staffList.filter(s => s.is_approved === 0).length > 0 && (
+              <div className="p-5 rounded-3xl bg-amber-50/90 border-2 border-amber-300 shadow-sm space-y-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-3 h-3 rounded-full bg-amber-500 animate-ping" />
+                  <h5 className="font-serif font-bold text-sm text-amber-900">
+                    🔔 Pending Staff Approval Requests ({staffList.filter(s => s.is_approved === 0).length})
+                  </h5>
+                </div>
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  The following individuals have registered as salon staff. Please verify their identity and either approve their access or reject their request:
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {staffList.filter(s => s.is_approved === 0).map(staff => (
+                    <div key={staff.id} className="p-4 rounded-2xl bg-white border border-amber-200 shadow-xs flex flex-col justify-between space-y-3">
+                      <div>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-serif font-bold text-sm text-gray-900 block">{staff.name}</span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-100 text-amber-800 inline-block mt-0.5">
+                              {staff.designation || 'Staff Stylist'}
+                            </span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-amber-200 text-amber-900 font-mono">
+                            PENDING APPROVAL
+                          </span>
+                        </div>
+                        <div className="mt-2 text-xs space-y-0.5 text-gray-600">
+                          <p className="font-mono">📧 {staff.email}</p>
+                          {staff.phone && <p className="font-mono">📱 {staff.phone}</p>}
+                          <p className="text-[11px] text-gray-400">Registered: {staff.created_at ? staff.created_at.split(' ')[0] : 'Recent'}</p>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-gray-100 flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleRejectStaff(staff.id, staff.name)}
+                          className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold cursor-pointer transition-colors"
+                        >
+                          Reject ❌
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApproveStaff(staff.id)}
+                          className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors flex items-center gap-1.5"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Approve Staff ✅</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* APPROVED ACTIVE STAFF LIST */}
+            <div className="space-y-3">
+              <h5 className="font-serif font-bold text-sm text-gray-800">
+                Active Approved Staff ({staffList.filter(s => s.is_approved === 1).length})
+              </h5>
+
+              {staffList.filter(s => s.is_approved === 1).length === 0 ? (
+                <div className="p-6 rounded-2xl bg-gray-50 border border-gray-200 text-center text-xs text-gray-500">
+                  No active staff members approved yet.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {staffList.filter(s => s.is_approved === 1).map(staff => (
+                    <div key={staff.id} className="p-4 rounded-2xl bg-white border border-gray-200 shadow-xs flex flex-col justify-between space-y-3">
+                      <div>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-serif font-bold text-sm text-gray-900 block">{staff.name}</span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-[#FCE7EC] text-[#541224] inline-block mt-0.5">
+                              {staff.designation || 'Staff Stylist'}
+                            </span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-emerald-100 text-emerald-800">
+                            ACTIVE
+                          </span>
+                        </div>
+                        <div className="mt-2 text-xs space-y-0.5 text-gray-600">
+                          <p className="font-mono text-[11px]">📧 {staff.email}</p>
+                          {staff.phone && <p className="font-mono text-[11px]">📱 {staff.phone}</p>}
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
+                        <span>Staff ID: #{staff.id}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRejectStaff(staff.id, staff.name)}
+                          className="text-rose-600 hover:underline cursor-pointer font-medium"
+                          title="Remove Staff Member"
+                        >
+                          Remove Staff
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
