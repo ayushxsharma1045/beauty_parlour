@@ -27,11 +27,19 @@ export const Footer: React.FC<FooterProps> = ({ onOpenBooking }) => {
           {/* Brand Info */}
           <div className="space-y-4">
             <div className="flex items-center gap-3.5">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-[#D4A5AC] p-0.5 shadow-md bg-white shrink-0">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-[#D4A5AC] p-0.5 shadow-md bg-white shrink-0">
                 <img
                   src="/images/logo.jpg"
                   alt="Durga Beauty Parlour"
                   className="w-full h-full object-cover rounded-full"
+                  onError={(e) => {
+                    const target = e.currentTarget as HTMLImageElement;
+                    target.style.display = 'none';
+                    if (target.parentElement) {
+                      target.parentElement.classList.add('flex', 'items-center', 'justify-center', 'bg-[#541224]');
+                      target.parentElement.innerHTML = '<span class="text-white font-serif font-bold text-xs sm:text-base">DBP</span>';
+                    }
+                  }}
                 />
               </div>
               <div>

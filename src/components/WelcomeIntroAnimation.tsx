@@ -380,49 +380,57 @@ export const WelcomeIntroAnimation: React.FC = () => {
           <div className="absolute -inset-2.5 rounded-full border border-[#F4A7B9]/70 animate-pulse pointer-events-none" />
 
           {/* Logo Badge */}
-          <div className="relative w-36 h-36 sm:w-44 sm:h-44 rounded-full overflow-hidden p-1.5 bg-gradient-to-tr from-[#D4AF37] via-[#FFF3B0] to-[#B76E79] shadow-[0_0_55px_rgba(212,175,55,0.85)]">
+          <div className="relative w-28 h-28 sm:w-44 sm:h-44 rounded-full overflow-hidden p-1 sm:p-1.5 bg-gradient-to-tr from-[#D4AF37] via-[#FFF3B0] to-[#B76E79] shadow-[0_0_55px_rgba(212,175,55,0.85)]">
             <img
               src="/images/logo.jpg"
               alt="Durga Beauty Parlour Logo"
               className="w-full h-full object-cover rounded-full bg-white transform hover:scale-105 transition-transform duration-500"
+              onError={(e) => {
+                const target = e.currentTarget as HTMLImageElement;
+                target.style.display = 'none';
+                if (target.parentElement) {
+                  target.parentElement.classList.add('flex', 'items-center', 'justify-center', 'bg-[#541224]');
+                  target.parentElement.innerHTML = '<span class="text-white font-serif font-bold text-2xl sm:text-4xl tracking-widest">DBP</span>';
+                }
+              }}
             />
           </div>
 
           {/* Sparkle Flares on Logo */}
-          <Sparkles className="absolute -top-4 -right-4 w-9 h-9 text-[#FFDF00] animate-bounce [animation-duration:2s] drop-shadow-[0_0_12px_#FFDF00]" />
-          <Sparkles className="absolute -bottom-3 -left-3 w-7 h-7 text-[#F4A7B9] animate-pulse drop-shadow-[0_0_10px_#F4A7B9]" />
+          <Sparkles className="absolute -top-3 -right-3 sm:-top-4 sm:-right-4 w-7 h-7 sm:w-9 sm:h-9 text-[#FFDF00] animate-bounce [animation-duration:2s] drop-shadow-[0_0_12px_#FFDF00]" />
+          <Sparkles className="absolute -bottom-2 -left-2 sm:-bottom-3 sm:-left-3 w-5 h-5 sm:w-7 sm:h-7 text-[#F4A7B9] animate-pulse drop-shadow-[0_0_10px_#F4A7B9]" />
         </div>
 
         {/* PARLOUR NAME & BRAND TYPOGRAPHY */}
         <div
-          className={`mt-7 space-y-3 transition-all duration-700 delay-150 transform ${
+          className={`mt-5 sm:mt-7 space-y-2 sm:space-y-3 transition-all duration-700 delay-150 transform ${
             stage === 'revealed' || stage === 'complete'
               ? 'opacity-100 translate-y-0 scale-100'
               : 'opacity-40 translate-y-4 scale-95 blur-[1px]'
           }`}
         >
           {/* Tag Pill */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#B76E79]/30 border border-[#D4A5AC]/60 text-[#F8CAD5] text-xs font-semibold tracking-widest uppercase shadow-md backdrop-blur-md">
-            <Sparkles className="w-3.5 h-3.5 text-[#FFDF00]" />
+          <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full bg-[#B76E79]/30 border border-[#D4A5AC]/60 text-[#F8CAD5] text-[10px] sm:text-xs font-semibold tracking-widest uppercase shadow-md backdrop-blur-md">
+            <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#FFDF00]" />
             <span>Luxury Sanctuary for Women</span>
           </div>
 
           {/* Main Brand Title */}
-          <h1 className="font-serif text-4xl sm:text-6xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#FFF3B0] via-[#FFDF00] to-[#E5C158] drop-shadow-[0_4px_24px_rgba(0,0,0,0.9)]">
+          <h1 className="font-serif text-3xl min-[400px]:text-4xl sm:text-6xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#FFF3B0] via-[#FFDF00] to-[#E5C158] drop-shadow-[0_4px_24px_rgba(0,0,0,0.9)] px-2">
             Durga Beauty Parlour
           </h1>
 
           {/* Tagline */}
-          <div className="flex items-center justify-center gap-3 pt-1">
-            <div className="h-[1px] w-12 bg-gradient-to-r from-transparent to-[#B76E79]" />
-            <p className="font-sans text-xs sm:text-base tracking-[0.3em] uppercase text-[#F8CAD5] font-semibold">
+          <div className="flex items-center justify-center gap-2 sm:gap-3 pt-1">
+            <div className="h-[1px] w-8 sm:w-12 bg-gradient-to-r from-transparent to-[#B76E79]" />
+            <p className="font-sans text-[10px] min-[380px]:text-xs sm:text-base tracking-[0.2em] sm:tracking-[0.3em] uppercase text-[#F8CAD5] font-semibold whitespace-nowrap">
               Your Beauty, Our Passion.
             </p>
-            <div className="h-[1px] w-12 bg-gradient-to-l from-transparent to-[#B76E79]" />
+            <div className="h-[1px] w-8 sm:w-12 bg-gradient-to-l from-transparent to-[#B76E79]" />
           </div>
 
-          <p className="text-xs text-[#F8CAD5]/80 tracking-wider pt-1 font-light italic flex items-center justify-center gap-1.5">
-            <Heart className="w-3.5 h-3.5 text-[#FFB3C6] inline fill-current" />
+          <p className="text-[11px] sm:text-xs text-[#F8CAD5]/80 tracking-wider pt-0.5 sm:pt-1 font-light italic flex items-center justify-center gap-1.5">
+            <Heart className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#FFB3C6] inline fill-current" />
             <span>Jaipur, Rajasthan • Welcome to Royal Pampering</span>
           </p>
         </div>

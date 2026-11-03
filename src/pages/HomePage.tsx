@@ -140,7 +140,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenBooking, onOpenConsult
             </div>
 
             {/* Quick Trust Highlights */}
-            <div className="pt-6 border-t border-white/15 grid grid-cols-3 gap-4 text-xs">
+            <div className="pt-6 border-t border-white/15 grid grid-cols-1 min-[480px]:grid-cols-3 gap-3 sm:gap-4 text-xs">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-[#F4B8C5] shrink-0" />
                 <span className="text-rose-100 font-light">100% Women-Only Salon</span>

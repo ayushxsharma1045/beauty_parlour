@@ -126,7 +126,19 @@ export const AuthPage: React.FC = () => {
           </button>
 
           <div className="w-14 h-14 rounded-full overflow-hidden mx-auto border-2 border-[#D4A5AC] p-0.5 shadow-md bg-white">
-            <img src="/images/logo.jpg" alt="Logo" className="w-full h-full object-cover rounded-full" />
+            <img
+              src="/images/logo.jpg"
+              alt="Logo"
+              className="w-full h-full object-cover rounded-full"
+              onError={(e) => {
+                const target = e.currentTarget as HTMLImageElement;
+                target.style.display = 'none';
+                if (target.parentElement) {
+                  target.parentElement.classList.add('flex', 'items-center', 'justify-center', 'bg-[#541224]');
+                  target.parentElement.innerHTML = '<span class="text-white font-serif font-bold text-sm">DBP</span>';
+                }
+              }}
+            />
           </div>
           <h2 className="font-serif text-2xl font-bold tracking-wide">
             Durga Beauty Parlour

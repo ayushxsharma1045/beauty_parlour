@@ -1740,43 +1740,62 @@ export const AdminDashboardPage: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-gray-200">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-              isAdmin ? 'bg-[#541224] text-white' : 'bg-purple-900 text-purple-100'
-            }`}>
-              {isAdmin ? 'Master Administrator Console' : 'Operational Staff Console'}
-            </span>
-            <span className="text-xs text-gray-500 font-medium">
-              • Signed in as <strong className="text-gray-900">{user.name}</strong> ({isAdmin ? 'Owner / Admin' : user.designation || 'Staff'})
-            </span>
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden border-2 border-[#D4A5AC] p-0.5 bg-white shadow-xs shrink-0">
+            <img
+              src="/images/logo.jpg"
+              alt="Durga Beauty Parlour Logo"
+              className="w-full h-full object-cover rounded-full"
+              onError={(e) => {
+                const target = e.currentTarget as HTMLImageElement;
+                target.style.display = 'none';
+                if (target.parentElement) {
+                  target.parentElement.classList.add('flex', 'items-center', 'justify-center', 'bg-[#541224]');
+                  target.parentElement.innerHTML = '<span class="text-white font-serif font-bold text-xs">DBP</span>';
+                }
+              }}
+            />
           </div>
-          <h1 className="font-serif text-3xl font-bold text-[#541224] mt-1">
-            {isAdmin ? 'Durga Beauty Parlour Owner Dashboard' : 'Durga Beauty Parlour Staff Workspace'}
-          </h1>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${
+                isAdmin ? 'bg-[#541224] text-white' : 'bg-purple-900 text-purple-100'
+              }`}>
+                {isAdmin ? 'Master Admin' : 'Staff Workspace'}
+              </span>
+              <span className="text-xs text-gray-500 font-medium truncate max-w-[200px]">
+                • {user.name} ({isAdmin ? 'Admin' : user.designation || 'Staff'})
+              </span>
+            </div>
+            <h1 className="font-serif text-xl sm:text-3xl font-bold text-[#541224] mt-0.5 leading-tight">
+              {isAdmin ? 'Durga Beauty Parlour Admin' : 'Durga Beauty Parlour Staff Workspace'}
+            </h1>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <button
             onClick={() => navigate('/')}
-            className="px-4 py-2 rounded-full border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer"
+            className="px-3 sm:px-4 py-2 rounded-full border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
             title="Go to customer website"
           >
             <Home className="w-3.5 h-3.5 text-[#B76E79]" />
-            <span>View Website</span>
+            <span className="hidden min-[380px]:inline">View Website</span>
           </button>
 
           <button
             onClick={loadAllData}
-            className="px-4 py-2 rounded-full border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer"
+            className="px-3 sm:px-4 py-2 rounded-full border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            title="Refresh salon data"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Refresh Data</span>
+            <span className="hidden min-[380px]:inline">Refresh</span>
           </button>
 
           <button
             onClick={logout}
-            className="px-4 py-2 rounded-full border border-rose-200 text-xs font-semibold text-rose-700 hover:bg-rose-50 transition-colors flex items-center gap-1.5 cursor-pointer"
+            className="px-3 sm:px-4 py-2 rounded-full border border-rose-200 text-xs font-semibold text-rose-700 hover:bg-rose-50 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            title="Sign Out"
           >
             <Lock className="w-3.5 h-3.5" />
             <span>Sign Out</span>
@@ -1785,7 +1804,7 @@ export const AdminDashboardPage: React.FC = () => {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex border-b border-gray-200 gap-2 sm:gap-6 text-xs font-bold uppercase tracking-wider overflow-x-auto pb-1 scrollbar-none">
+      <div className="flex border-b border-gray-200 gap-2 sm:gap-6 text-xs font-bold uppercase tracking-wider overflow-x-auto pb-1 scrollbar-none touch-pan-x">
         <button
           onClick={() => setActiveTab('overview')}
           className={`pb-3 px-1 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${

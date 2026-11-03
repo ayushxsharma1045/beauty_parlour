@@ -405,7 +405,7 @@ export const MakeoverReelsSection: React.FC<MakeoverReelsSectionProps> = ({ onOp
           {/* Central Vertical Player Card (9:16) */}
           <div className="relative w-full h-full sm:h-[92vh] sm:max-w-md sm:rounded-3xl overflow-hidden bg-black shadow-2xl flex flex-col justify-between border border-white/15 select-none">
             {/* Top Navigation Bar: Minimal & Clean */}
-            <div className="absolute top-0 left-0 right-0 z-30 p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent flex items-center justify-between text-white text-xs">
+            <div className="absolute top-0 left-0 right-0 z-30 p-4 pr-16 bg-gradient-to-b from-black/80 via-black/40 to-transparent flex items-center justify-between text-white text-xs">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
                 <span className="font-bold uppercase tracking-wider text-[11px] text-[#F8CAD5]">

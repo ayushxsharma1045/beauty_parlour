@@ -197,8 +197,20 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         {/* Header */}
         <div className="sticky top-0 z-20 flex items-center justify-between px-6 py-4 bg-[#541224] text-white border-b border-[#B76E79]/30 rounded-t-3xl">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[#FCE7EC] p-0.5 overflow-hidden">
-              <img src="/images/logo.jpg" alt="Logo" className="w-full h-full object-cover rounded-full" />
+            <div className="w-9 h-9 rounded-full bg-[#FCE7EC] p-0.5 overflow-hidden shrink-0">
+              <img
+                src="/images/logo.jpg"
+                alt="Logo"
+                className="w-full h-full object-cover rounded-full"
+                onError={(e) => {
+                  const target = e.currentTarget as HTMLImageElement;
+                  target.style.display = 'none';
+                  if (target.parentElement) {
+                    target.parentElement.classList.add('flex', 'items-center', 'justify-center', 'bg-[#541224]');
+                    target.parentElement.innerHTML = '<span class="text-white font-serif font-bold text-[10px]">DBP</span>';
+                  }
+                }}
+              />
             </div>
             <div>
               <h3 className="font-serif text-lg font-semibold tracking-wide text-white">
