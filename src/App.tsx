@@ -24,6 +24,7 @@ import { CustomerPortalPage } from './pages/CustomerPortalPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { WeddingsFestivePage } from './pages/WeddingsFestivePage';
 import { WelcomeIntroAnimation } from './components/WelcomeIntroAnimation';
+import { ScrollToTop } from './components/ScrollToTop';
 
 export function App() {
   const [isBookingOpen, setIsBookingOpen] = useState(false);
@@ -45,6 +46,9 @@ export function App() {
       <CartProvider>
         <ToastProvider>
           <BrowserRouter>
+            {/* Automatic Scroll-To-Top on Navigation & Floating Back-To-Top Button */}
+            <ScrollToTop />
+
             <div className="min-h-screen flex flex-col justify-between bg-[#FDFBF7] text-[#2C1810]">
               {/* Grand Welcome Entrance Intro Animation */}
               <WelcomeIntroAnimation />
@@ -87,6 +91,7 @@ export function App() {
                     element={<GalleryPage onOpenBooking={handleOpenBooking} />}
                   />
                   <Route
+                    path="/about"
                     element={<AboutPage onOpenBooking={handleOpenBooking} />}
                   />
                   <Route
